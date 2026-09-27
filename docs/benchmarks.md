@@ -3,10 +3,11 @@
 All numbers are **measured on the reference rig** and are directional, not
 guarantees. Your model, GPU, and flags dominate the result.
 
-Rig: 2× RTX 5090, Qwen3.8-27B NVFP4 (Gittensor), vLLM tensor-parallel 2, FP8 KV
-cache, MTP speculative decoding (6 tokens), LMCache connector, `max_model_len`
-200000, `gpu_memory_utilization` 0.90, `--enable-prefix-caching
---enable-chunked-prefill`.
+Rig: 2× RTX 5060 Ti (16 GB each), Qwen3.8-27B NVFP4 (Gittensor), vLLM
+tensor-parallel 2, FP8 KV cache, MTP speculative decoding (6 tokens), LMCache
+connector, `max_model_len` 200000, `gpu_memory_utilization` 0.90,
+`--enable-prefix-caching --enable-chunked-prefill`. The raw receipts are kept in
+[`build_examples/2x-rtx5060ti/`](../build_examples/2x-rtx5060ti/README.md).
 
 ## The readout ladder
 

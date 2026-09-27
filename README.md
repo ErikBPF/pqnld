@@ -192,7 +192,9 @@ Server-side flags matter more than pqnld's:
   per-step token budget. A lean profile (no spec decode, no KV connector) is
   what pqnld's `engine_profile: lean` selects in the reference launcher.
 
-See [docs/benchmarks.md](docs/benchmarks.md) for the measured trade-offs.
+See [docs/benchmarks.md](docs/benchmarks.md) for the measured trade-offs, and
+[`build_examples/`](build_examples/README.md) for the whole recipe on a real rig
+(2× RTX 5060 Ti) with the raw benchmark receipts.
 
 ---
 
