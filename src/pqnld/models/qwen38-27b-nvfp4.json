@@ -1,0 +1,10 @@
+{
+  "readout": "auto",
+  "letters": "abcdefghijklmnopqrstuvwxyz",
+  "temperature": 1.0,
+  "enable_thinking": false,
+  "system_prompt": "You are a decision engine. Read the state, then answer the question by replying with exactly one option key from the list. Do not explain.",
+  "letter_system_prompt": "You are a decision engine. Read the state, then answer the question by replying with exactly one option letter from the list. Do not explain.",
+  "chat_template": "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{body}<|im_end|>\n<|im_start|>assistant\n thinking\n\n</think>\n\n",
+  "engine_profile": "full"
+}
