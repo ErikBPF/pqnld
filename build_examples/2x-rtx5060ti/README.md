@@ -18,6 +18,16 @@ number below has a raw receipt in [`results/`](results/).
 `qwen38-27b-nvfp4`. It is a thinking/chat model — `pqnld` suppresses the
 thinking block through the descriptor, which is the whole trick.
 
+## Image used
+
+The receipts were measured with a locally built image,
+`localhost/apollo-qwen38-lmcache:trial`, built from
+`docker.io/vllm/vllm-openai@sha256:5f5e535216848d0c52159c8c13a0af04be5f6fe1a84e79914300610796f76d40`
+plus two small LMCache patches (packed-KV support). [`serve-engine.sh`](serve-engine.sh)
+pins the same base digest; the patches only matter if you turn on the LMCache KV
+connector. `pqnld` itself ran from source inside that container — there is no
+separate `pqnld` image behind these numbers.
+
 ## Serve the engine
 
 [`serve-engine.sh`](serve-engine.sh) is the profile the receipts were measured
