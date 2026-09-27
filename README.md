@@ -1,5 +1,12 @@
 # pqnld — Parallel Query Node, Logit Decisions
 
+First, the honest disclaimer: this is a **small, opinionated wrapper**, not a
+framework. It does one thing — turn the model's own logprobs into a typed
+probability distribution over *your* options — and it would rather do that well
+than grow features. If you came for a general agent framework, this is not it.
+If you want calibrated decisions out of the endpoint you already serve, keep
+reading.
+
 Turn any **vLLM / OpenAI-compatible endpoint** into a **typed decision engine** by
 reading the model's own answer-slot logprobs. No extra weights, no training, no
 fine-tuning.
@@ -18,6 +25,32 @@ question: which day?  {monday, tuesday, friday}
 A decision costs **one prefill** and runs on the engine you already serve, so
 chat completions and decisions share one vLLM process and its continuous
 batching — no second model to host.
+
+> The name is the point. **P**arallel **Q**uery **N**ode, **L**ogit **D**ecisions
+> — and, if you tilt your head, *¿por qué no los dos?* Why not both: chat and
+> decisions, on one engine. 🎲
+
+---
+
+## What it is / what it isn't
+
+**It is:**
+
+- A readout. One prefill per question; the distribution is the model's own belief,
+  softmaxed over your options.
+- A wrapper. No weights, no training, no fork of your engine.
+- One engine. Chat and decisions share vLLM's continuous batch, because a decision
+  is just a tiny chat request.
+
+**It isn't:**
+
+- A reasoner. It does not chain thoughts, call tools, or emit prose. One pass
+  decides — that is the whole trick, and the whole limit.
+- A `score` type, or free-form. `choice` (2–255) and `noul` only; anything else is
+  refused, never approximated.
+- Magic calibration. It reports the model's belief faithfully. Whether that belief
+  is *right* is your data's problem, not the wrapper's.
+- A scheduler. Under load, your engine's admission ramp sets latency, not pqnld.
 
 ---
 
@@ -212,3 +245,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+---
+
+Thanks for reading this far. Now go point it at an endpoint you already run. 🎲
