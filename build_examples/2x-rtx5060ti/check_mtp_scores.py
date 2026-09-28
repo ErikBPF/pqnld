@@ -43,6 +43,8 @@ assert out["logprob_token_ids_state"] is state
 assert out["max_per_req_token_ids"] == 3
 assert calls[-1][0][3] == [0, 2, 3], "request boundaries changed"
 assert not out["logits_mode"]
+scope[method.name](*args[:-1], -1, expanded_idx_mapping=mapping, max_per_req_token_ids=3)
+assert calls[-1][0][1] == 0, "explicit IDs must score even without ordinary logprobs"
 calls.clear()
 assert scope[method.name](*args[:-1], -1, expanded_idx_mapping=mapping,
                          max_per_req_token_ids=0) is None
@@ -77,7 +79,12 @@ batch = SimpleNamespace(
 self._verify = lambda logits, *args: (logits, torch.zeros(len(args[4]), 1, dtype=torch.long),
                                      torch.ones(len(args[4]), dtype=torch.long))
 self._get_logprobs_tensors = record_scores
-self.sampler.logprob_token_ids_state = SimpleNamespace(max_num_token_ids=lambda indices: 26)
+def max_ids(indices):
+    assert list(indices) == [7, 2, 9], "all chunks need the full batch width"
+    return max({7: 3, 2: 0, 9: 26}[i] for i in indices)
+
+
+self.sampler.logprob_token_ids_state = SimpleNamespace(max_num_token_ids=max_ids)
 logits = torch.arange(600).reshape(6, 100).float()
 _, _, gathered = scope[chunk_method.name](self, logits, batch, None,
                                         torch.zeros(6, dtype=torch.long), torch.arange(6), 3, -1)

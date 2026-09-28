@@ -1,8 +1,17 @@
 # PQNLD readout improvements: implementation and live verification
 
-**Stage / revision:** GREEN + E2E / 4  
+**Stage / revision:** RV / 5  
 **Status:** local correctness improvements complete; shared-chat readiness blocked  
 **Owner / date:** PQNLD / 2026-09-28 UTC  
+
+Latest review: two independent passes corrected patch-generation atomicity and
+CPU regression gaps. Local suite: 48 passing tests; both benchmark self-tests
+pass. Revised candidate routing also passes inside the running image using CPU
+tensors and in-memory source transformation. Added GPU numerical check is syntax
+checked but unexecuted. No candidate image, GPU numerical result, distributed
+gather result or repaired mixed-serving result exists yet. Those gates remain
+blocked on GPU capacity/maintenance; no new serving performance claim is made.
+
 **Basis:** improve Jev-like typed decisions and normal chat using one resident LLM;
 "continue. Do all necessary improvements and show me a one pager in the end".
 Publication candidate: branch `test/readout-baseline`, based on `f541536`.

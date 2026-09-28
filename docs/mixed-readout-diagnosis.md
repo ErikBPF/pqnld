@@ -85,9 +85,8 @@ stopped and no memory limits were changed to force the experiment through.
 
 The original container was restarted successfully and `/health` passed. Its startup
 then reported 14.92/14.90 GiB free. The temporary container was removed and the SSH
-tunnel closed. Original image and MTP configuration are restored. A retry should
-wait for GPU memory to stabilize after stopping the original container, before
-starting the trial; preserve the same restoration procedure.
+tunnel closed. The retry recommendation from this initial trial was superseded
+by the coordinated cache experiment below.
 
 Follow-up retry on 2026-09-28 waited three minutes for GPU memory to stabilize;
 it did not, so no trial container was started. Restoration was also blocked by
@@ -139,10 +138,9 @@ sequential rather than randomized. This is bounded diagnostic evidence, not a
 sustained-load acceptance test. Concurrent 26-label/permutation coverage remains
 to be measured (the concurrent diagnostic used three labels).
 
-Conclusion: no-MTP plus compatible cache geometry is a demonstrated candidate for
-shared chat and exact-token scoring. Preserve MTP performance by repairing explicit
-ID gathering in the V2 rejection sampler, or accept ordinary decoding's measured
-tradeoff and run sustained acceptance tests before rollout. The deployed engine
+Conclusion: no-MTP plus compatible cache geometry isolates the scoring defect,
+but is excluded from deployment. Preserve MTP by repairing explicit-ID gathering
+in the V2 rejection sampler before sustained acceptance tests. The deployed engine
 still uses original MTP and cache864; experimental scoring remains opt-in. Both
 original health checks passed, temporary containers were removed, and the tunnel
 was closed. No engine patch or permanent configuration change was made.
@@ -181,3 +179,20 @@ rebased boundaries, common output widths, and concatenated request offsets.
 An adaptive-boundary check confirms device offsets are preserved. Verification
 and GPU scoring remain stubbed: these checks do not establish numerical kernel
 correctness or end-to-end adaptive verification behavior.
+
+## Review revision 2
+
+Independent review found and corrected partial-patch output on source drift,
+missing explicit-ID-only CPU coverage, and a constant-width fake that could hide
+incorrect request-slot selection. The generator now buffers both transformations
+before output and explicitly enables ID gathering in the model runner. A focused
+test covers that transformation; distributed gathering remains unverified.
+
+`check_mtp_gpu.py` adds a numerical candidate-image check using real scorer kernels
+and a PyTorch log-softmax reference, including sampled columns, mixed ordinary and
+explicit-ID requests, and unequal accepted lengths. It has **not been executed**:
+the serving GPUs had only 424-438 MiB free. CPU routing passed with the candidate
+transformed in memory; the live engine is unchanged. A spare GPU or a coordinated
+maintenance window is required for GPU checks, image validation and serving tests.
+Real chunk concatenation, adaptive numerical checks and distributed gathering
+remain required before a deployment claim.

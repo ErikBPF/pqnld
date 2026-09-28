@@ -21,16 +21,23 @@ def patched(relative, text):
             "            cu_num_generated_tokens,\n            logprob_token_ids_state=self.sampler.logprob_token_ids_state,\n            expanded_idx_mapping=expanded_idx_mapping,\n            max_per_req_token_ids=max_per_req_token_ids,\n            logits_mode=")
         text = replace_once(text, "                max_num_logprobs,\n            )",
             "                max_num_logprobs,\n                input_batch.expanded_idx_mapping[lo:hi],\n                self.sampler.logprob_token_ids_state.max_num_token_ids(\n                    input_batch.idx_mapping_np\n                ),\n            )")
-    else:
+    elif relative == "v1/worker/gpu/model_runner.py":
         text = replace_once(text,
-            "                    # Rejection sampler does not return logprob token ids.\n                    include_token_ids=(\n                        global_input_batch.num_draft_tokens == 0\n                        or self.rejection_sampler is None\n                    ),\n", "")
+            "                    # Rejection sampler does not return logprob token ids.\n                    include_token_ids=(\n                        global_input_batch.num_draft_tokens == 0\n                        or self.rejection_sampler is None\n                    ),\n", "                    include_token_ids=True,\n")
+    else:
+        raise ValueError("unsupported target: " + relative)
     return text
 
 
-if __name__ == "__main__":
-    root = Path(sys.argv[1])
+def generate(root):
+    diffs = []
     for relative in ("v1/worker/gpu/spec_decode/rejection_sampler.py", "v1/worker/gpu/model_runner.py"):
         old = (root / relative).read_text()
         new = patched(relative, old)
-        sys.stdout.writelines(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
-                             fromfile="a/vllm/" + relative, tofile="b/vllm/" + relative))
+        diffs.extend(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
+                     fromfile="a/vllm/" + relative, tofile="b/vllm/" + relative))
+    return ''.join(diffs)
+
+
+if __name__ == "__main__":
+    sys.stdout.write(generate(Path(sys.argv[1])))
