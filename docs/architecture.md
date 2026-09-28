@@ -14,12 +14,12 @@ Softmax them and you have the answer distribution.
 render  ->  POST /v1/chat/completions (max_tokens=1, logprobs, top_logprobs>=N)
         ->  read top_logprobs at the answer slot
         ->  keep single-letter entries, map letter -> option key
-        ->  floor + softmax(temperature)
+        ->  require every label + softmax(temperature)
 ```
 
 Consequences:
 
-- **Options are independent** — no autoregressive coupling between choices.
+- **No autoregressive option generation** — options compete at one answer slot.
 - **Multi-token option keys cost nothing** — the model is scored on the letter,
   not on the key's tokens.
 - **No prompt-logprob memory** — nothing needs forced continuation scoring.
@@ -45,13 +45,17 @@ The echo path survives only where letters cannot: **more than 26 options**.
    `top_logprobs=max(len(keys), 20)`, `temperature=0`, and the descriptor's
    `enable_thinking` toggle.
 3. Walk the answer slot's `top_logprobs`; keep the first entry per letter that is
-   in `letters`; ignore non-letter tokens.
-4. Letters the model did not rank get a floor (`min_ranked - 5.0`), so an
-   option is never literally zero.
+   in `letters`, after trimming whitespace and lowercasing. Only a single ASCII
+   letter qualifies; words and special-token strings are ignored.
+4. Require every option label to be present. Missing labels raise `Unsupported`
+   (HTTP 422); no scores are fabricated. Asking for at least N top tokens does
+   not guarantee that all N labels appear.
 
 Then `softmax(score / temperature)` gives the distribution, and `choice` is the
 argmax. For `noul`, the keys are `false`/`true` and `noul` is
-`P(true)`.
+`P(true)` within the allowed-label readout. These normalized scores are not
+automatically calibrated probabilities of correctness; calibration needs
+held-out labeled data.
 
 ## The echo fallback
 
@@ -73,6 +77,9 @@ expected answer `b`):
   keep `lettered`;
 - otherwise switch to `echo` and require a `chat_template`;
 - a descriptor that asks for `echo` with no `chat_template` is refused up front.
+
+Incomplete label coverage during the probe is refused rather than silently
+selecting a readout mode.
 
 The probe is best-effort: a transport error during the probe falls back to echo
 rather than refusing to start. Point the server at a healthy engine (the
@@ -98,7 +105,8 @@ side from being the bottleneck.
 A bounded LRU (`cache_size`, default 256) keyed by
 `model + readout mode + descriptor + temperature + state + questions`. Identical
 repeated decisions are served from memory with no upstream call. Cache hits
-return a shallow copy of the stored answer.
+return a shallow copy of the stored answer. The cache key preserves mapping
+order because criteria order determines the rendered option-label assignment.
 
 ## Capacity ceiling
 
@@ -118,3 +126,16 @@ to `1 ± 0.01`, `noul` is a probability. A failure is a `500`, not a wrong answe
 pqnld holds no credentials and binds `127.0.0.1` by default. If you expose it,
 put auth or a firewall in front of it: an open decision endpoint is an open proxy
 to your model.
+# Experimental specific-token scoring
+
+A descriptor may opt into `"specific_token_scores": true` for engines supporting
+vLLM's `logprob_token_ids`, `return_tokens_as_token_ids`, and `/tokenize` APIs.
+PQNLD resolves and caches each literal label's token ID, rejects multi-token or
+duplicate mappings, and requests every label's score with `top_logprobs: 0`.
+It neither constrains sampling nor applies logit bias. Returned IDs must cover
+every label; uppercase and whitespace variants are not pooled into these events.
+
+This remains opt-in: Apollo vLLM 0.30.0 passed isolated tests but returned HTTP 500
+for decisions during simultaneous ordinary chat. See [the one-pager](readout-one-pager.md).
+Do not enable it for shared-chat production until that engine failure is fixed
+and mixed-load tests pass. Label probabilities still require held-out calibration.

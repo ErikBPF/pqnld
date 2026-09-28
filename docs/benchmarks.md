@@ -99,6 +99,11 @@ contention with long generations remains.
 
 ## Reproduce
 
+The [strict readout smoke baseline](readout-baseline.md) records a later
+correctness-focused run: removing fabricated missing scores exposed incomplete
+label coverage and the reference engine's 20-logprob limit. Earlier successful
+request counts do not establish complete score coverage under the strict contract.
+
 ```sh
 # concurrency + mixed chat/decision throughput
 python benchmarks/bench_parallel.py --each 4 --json parallel.json
@@ -110,3 +115,12 @@ python benchmarks/bench_mixed.py \
 
 Both take `--selftest` and run with no GPU (they then simply report failures, or
 skip the live phase). Point them at your own `--decide-url` / `--chat-url`.
+# Readout follow-up
+
+See [the implementation and live-test one-pager](readout-one-pager.md): exact-token
+scoring answered all ten isolated synthetic cases, but simultaneous ordinary chat
+exposed an upstream HTTP 500. The new scoring mode remains opt-in.
+# Approach comparison
+
+The [four-arm live experiment](approach-comparison.md) compares exact label
+scores, constrained JSON, bounded analysis, and the existing echo baseline.

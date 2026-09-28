@@ -198,7 +198,7 @@ class DecisionSidecarTest(unittest.TestCase):
         self.assertAlmostEqual(answer["probabilities"]["new york city"], softmax_top({"a": FAVOUR_A["a"], "b": FAVOUR_A["b"]})["a"], places=9)
 
     def test_more_than_26_options_uses_echo_fallback(self):
-        keys = [f"option-{i}" for i in range(27)]
+        keys = [f"option-{i:02d}" for i in range(27)]
         status, body = self.decide(
             "Pick one.",
             {"q": {"type": "choice", "instructions": "Which option?", "criteria": {k: k for k in keys}}},

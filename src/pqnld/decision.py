@@ -9,8 +9,8 @@ path /v1/systemone is kept as an alias so a stock kit client still runs.
 One request per question (not one per option): the previous echo design issued
 n+1 full-context prefills per question because this hybrid model's unified block
 size (864) exceeds a decision prompt, so nothing is prefix-cached. Letter labels
-are single tokens, so the answer-slot logprobs give the whole distribution at
-once, independent per option, with no prompt-logprob memory risk.
+must be single tokens; complete answer-slot scores give a distribution
+conditioned on the selected labels, without prompt-logprob memory risk.
 
 A model's readout is described by a models/<name>.json descriptor: the readout
 route (lettered|echo|auto), the chat template, the thinking toggle, the letters
@@ -62,7 +62,6 @@ CHAT_TEMPLATE = (
 )
 
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
-LETTER_FLOOR = 5.0
 # Cap on questions read concurrently. Bounds engine load for 255-question
 # documents and keeps the echo fallback's memory (per-question batch) in check.
 MAX_QUESTION_WORKERS = 8
@@ -108,6 +107,7 @@ class ModelSpec:
     letter_system_prompt: str = LETTER_SYSTEM_PROMPT
     chat_template: Optional[str] = CHAT_TEMPLATE
     engine_profile: str = "full"
+    specific_token_scores: bool = False
 
 
 def load_spec(name, directory=None):
@@ -187,10 +187,8 @@ def render_lettered(state, question, keys, letters=LETTERS):
 
 
 def letter_of(token):
-    for character in token.strip():
-        if character.isalpha():
-            return character.lower()
-    return None
+    token = token.strip().lower()
+    return token if len(token) == 1 and token in LETTERS else None
 
 
 def validate(questions, response):
@@ -239,6 +237,7 @@ class Readout:
         self.mode = self.spec.readout if self.spec.readout in ("lettered", "echo") else None
         self._cache = OrderedDict()
         self._lock = threading.Lock()
+        self._label_ids = {}
 
     def _require_template(self):
         if not self.spec.chat_template:
@@ -253,9 +252,12 @@ class Readout:
             return self.mode
         try:
             _, _, top_token = self._letter_scores(PROBE_STATE, PROBE_QUESTION, list(PROBE_QUESTION["criteria"]))
-            lettered = letter_of(top_token or "") in self.letters
+            letter = letter_of(top_token or "")
+            lettered = letter is not None and letter in self.letters
         except Unsupported:
-            raise
+            if self.spec.specific_token_scores:
+                raise
+            lettered = False
         except Exception:
             lettered = False
         if lettered:
@@ -294,7 +296,21 @@ class Readout:
         """One chat request; the answer-slot logprobs over the option letters."""
         letters = self.letters[: len(keys)]
         body = render_lettered(state, question, keys, letters)
-        payload = self._post("/v1/chat/completions", {
+        token_letters = {}
+        if self.spec.specific_token_scores:
+            with self._lock:
+                for letter in letters:
+                    if letter not in self._label_ids:
+                        tokens = self._post("/tokenize", {
+                            "model": self.model, "prompt": letter, "add_special_tokens": False,
+                        })["tokens"]
+                        if len(tokens) != 1:
+                            raise Unsupported(f"option label {letter!r} is not a single token")
+                        self._label_ids[letter] = tokens[0]
+                token_letters = {f"token_id:{self._label_ids[c]}": c for c in letters}
+            if len(token_letters) != len(letters):
+                raise Unsupported("option labels do not have distinct token IDs")
+        request = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": self.spec.letter_system_prompt},
@@ -305,7 +321,11 @@ class Readout:
             "logprobs": True,
             "top_logprobs": max(len(keys), 20),
             "chat_template_kwargs": {"enable_thinking": self.spec.enable_thinking},
-        })
+        }
+        if token_letters:
+            request.update(top_logprobs=0, logprob_token_ids=[self._label_ids[c] for c in letters],
+                           return_tokens_as_token_ids=True)
+        payload = self._post("/v1/chat/completions", request)
         usage = payload.get("usage") or {}
         logprobs = payload["choices"][0].get("logprobs")
         content = (logprobs or {}).get("content") or []
@@ -313,17 +333,24 @@ class Readout:
             raise RuntimeError("chat response carried no logprobs at the answer slot")
         top_logprobs = content[0].get("top_logprobs", [])
         top_token = max(top_logprobs, key=lambda item: item["logprob"])["token"] if top_logprobs else None
+        if token_letters:
+            top_token = token_letters.get(content[0].get("token"), "")
         by_letter = {}
         for item in top_logprobs:
-            letter = letter_of(item.get("token", ""))
+            letter = (token_letters.get(item.get("token")) if token_letters
+                      else letter_of(item.get("token", "")))
             if letter and letter in letters and letter not in by_letter:
                 by_letter[letter] = item["logprob"]
-        present = list(by_letter.values())
-        floor = min(present) - LETTER_FLOOR if present else -LETTER_FLOOR
-        return [by_letter.get(letter, floor) for letter in letters], usage, top_token
+        missing = [letter for letter in letters if letter not in by_letter]
+        if missing:
+            raise Unsupported(f"answer-slot logprobs missing option labels: {', '.join(missing)}")
+        return [by_letter[letter] for letter in letters], usage, top_token
 
     def _echo_scores(self, context, keys):
         """Fallback for >26 options: summed key-token logprobs, chunked."""
+        ordered = sorted(keys)
+        if any(right.startswith(left) for left, right in zip(ordered, ordered[1:])):
+            raise Unsupported("echo scoring cannot compare prefix-overlapping option keys")
         context_tokens = self._echo(context)["choices"][0]["logprobs"]["tokens"]
         scores = []
         usage = {}
@@ -353,7 +380,7 @@ class Readout:
             "temperature": self.temperature,
             "state": state,
             "questions": questions,
-        }, sort_keys=True, ensure_ascii=False, default=str)
+        }, ensure_ascii=False, default=str)
 
     def __call__(self, state, questions):
         mode = self.ensure_mode()

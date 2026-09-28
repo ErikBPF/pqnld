@@ -1,20 +1,18 @@
 # pqnld — Parallel Query Node, Logit Decisions
 
-First, the honest disclaimer: this is a **small, opinionated wrapper**, not a
-framework. It does one thing — turn the model's own logprobs into a typed
-probability distribution over *your* options — and it would rather do that well
-than grow features. If you came for a general agent framework, this is not it.
-If you want calibrated decisions out of the endpoint you already serve, keep
-reading.
+Use your existing LLM for fast completions and typed decisions when needed.
+pqnld reads model logprobs into a probability distribution over your options,
+without hosting a second model.
 
-Turn any **vLLM / OpenAI-compatible endpoint** into a **typed decision engine** by
+Turn a compatible **vLLM / OpenAI-style endpoint** into a **typed decision engine** by
 reading the model's own answer-slot logprobs. No extra weights, no training, no
 fine-tuning.
 
 Give it a `state` and a set of typed questions (`choice` over 2–255 options,
 `noul` for a yes-probability) and it returns one answer per question **with a
 full probability distribution** over exactly the options you supplied — no free
-text, nothing invented, and a calibrated confidence.
+text and no options outside the supplied set. Calibration must be evaluated on
+your own labeled data.
 
 ```
 state: "The meeting is on Tuesday at 3pm in room B."
@@ -22,9 +20,14 @@ question: which day?  {monday, tuesday, friday}
 ->  {"choice": "tuesday", "probabilities": {"monday": 0.02, "tuesday": 0.95, "friday": 0.03}}
 ```
 
-A decision costs **one prefill** and runs on the engine you already serve, so
+The lettered readout uses a one-token request per question on the engine you already serve, so
 chat completions and decisions share one vLLM process and its continuous
 batching — no second model to host.
+
+**Serving status:** exact-token scoring is experimental. The tested vLLM MTP
+path drops requested scores during concurrent chat; the proposed engine fix is
+not yet GPU-validated. MTP remains required for the primary completions workload.
+See [benchmark evidence and repair status](docs/mixed-readout-diagnosis.md).
 
 > The name is the point. **P**arallel **Q**uery **N**ode, **L**ogit **D**ecisions
 > — and, if you tilt your head, *¿por qué no los dos?* Why not both: chat and
@@ -36,8 +39,8 @@ batching — no second model to host.
 
 **It is:**
 
-- A readout. One prefill per question; the distribution is the model's own belief,
-  softmaxed over your options.
+- A readout. Returned option scores are normalized over your options; they are
+  not automatically calibrated correctness probabilities.
 - A wrapper. No weights, no training, no fork of your engine.
 - One engine. Chat and decisions share vLLM's continuous batch, because a decision
   is just a tiny chat request.
@@ -56,14 +59,14 @@ batching — no second model to host.
 
 ## Why
 
-- **No hallucination by construction.** The model never emits text; pqnld reads
+- **Closed-set outputs by construction.** The model never emits free text; pqnld reads
   the next-token distribution over the options you provided and softmaxes it.
-  An answer outside your option set is impossible.
+  An answer outside your option set is impossible; an incorrect choice is not.
 - **No new weights.** It is a wrapper over an endpoint you already run. If you
   serve Qwen, Llama, Mistral, or anything else, you already have a decision
   engine.
-- **Honest uncertainty.** The output is a distribution, so you get calibration
-  for free: use it for routing, triage, abstention, or confidence thresholds.
+- **Explicit uncertainty.** The output is a distribution over allowed labels.
+  Validate calibration before using it for routing, triage, or confidence thresholds.
 - **One engine, two workloads.** A decision is just a `max_tokens=1` +
   `logprobs` chat request, so vLLM's continuous batching and chunked prefill
   serve chat and decisions concurrently.
@@ -122,8 +125,9 @@ No GPU and no model are needed to try the HTTP surface: see
 2. It sends **one chat request** (`max_tokens=1`, `logprobs`, `top_logprobs ≥
    option count`) and reads the distribution over those letters at the answer
    slot.
-3. It maps letters back to option keys, ignores non-letter tokens, floors
-   letters the model did not rank, and softmaxes with a per-model temperature.
+3. It maps single-letter tokens back to option keys, ignores words and other
+   non-letter tokens, requires every label to be present, and softmaxes with a
+   per-model temperature. Missing label scores are refused with HTTP 422.
 
 Because a letter is a single token, options are independent and multi-token
 option keys cost nothing extra. Questions with **more than 26 options** cannot

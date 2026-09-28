@@ -153,3 +153,29 @@ Feature: Decision readout sidecar over a served Apollo model
     When a decision is posted to /v1/decide
     Then the sidecar returns a valid typed answer
     And a decision posted to the frozen kit's /v1/systemone alias also returns a valid typed answer
+
+  # Bound to tests/test_readout_integrity.py; five regressions observed failing
+  # before the strict-label, score-coverage and cache-order implementation.
+  @DR-17
+  Scenario: Words do not count as option labels
+    Given the answer slot ranks a word above complete single-letter option scores
+    When the readout sidecar answers the question
+    Then only the single-letter option scores determine the distribution
+    And the automatic startup probe does not accept a word as a top option letter
+
+  @DR-18
+  Scenario: Missing label evidence is refused
+    Given the answer slot omits one or all option labels
+    When the readout sidecar answers the question
+    Then the readout raises Unsupported instead of fabricating a distribution
+
+  @DR-19
+  Scenario: Cached answers respect rendered option order
+    Given a cached answer for a question
+    When the same criteria are supplied in a different order
+    Then the answer matches a fresh readout with that order
+  Scenario: Explicit token scoring requires complete distinct single-token labels
+    Given a descriptor enables specific token scores
+    When the engine tokenizes an option label into multiple tokens
+    Then the readout refuses the question
+    And no fabricated probability distribution is returned

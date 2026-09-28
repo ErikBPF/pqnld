@@ -67,7 +67,7 @@ Invariants (checked by the server before it replies, and rejected if broken):
 | Status | When |
 |---|---|
 | `400` | Malformed JSON body, or a missing `questions` field |
-| `422` | A question type the engine cannot answer, or a question whose options do not fit the model's context (`Unsupported`). The model's capacity message is preserved in `error` |
+| `422` | Unsupported question type, incomplete answer-slot label scores, or options that do not fit the model's context (`Unsupported`). The model's capacity message is preserved in `error` |
 | `404` | Unknown path |
 | `500` | The engine errored, or the readout self-check failed |
 
@@ -98,3 +98,10 @@ endpoint as a chat model.
 ```
 
 Use it for readiness/liveness. pqnld does not probe the upstream on this path.
+## Echo scoring limitation
+
+Echo scoring refuses prefix-overlapping option keys (for example `item-1` and
+`item-13`) with HTTP 422. This applies to explicit echo mode and the large-choice
+fallback. The same keys remain usable on the lettered route. Unterminated
+continuations describe overlapping events and must not be normalized as distinct
+answers. Other echo scores remain length-sensitive, not calibrated beliefs.
