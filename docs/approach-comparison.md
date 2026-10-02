@@ -2,9 +2,9 @@
 
 ## First live experiment: 2026-09-27
 
-Ran `benchmarks/compare.py` on Apollo's `qwen38-27b-nvfp4` via a temporary
-SSH tunnel. Eight synthetic selection cases: 2/3/10/26 options, each in both
-orders. Four arms ran sequentially in seeded shuffled order per case. Result
+Ran the historical Python `benchmarks/compare.py` on Apollo's `qwen38-27b-nvfp4`
+via a temporary SSH tunnel. Eight synthetic selection cases: 2/3/10/26 options,
+each in both orders. Four arms ran sequentially in seeded shuffled order per case. Result
 caching was disabled; engine prefix-cache state was uncontrolled. These are
 smoke results, not held-out accuracy or calibration evidence.
 
@@ -37,6 +37,9 @@ failed inside vLLM's logprob serializer. This sequential run does not clear that
 gate. JSON needs a separate mixed-load test too.
 
 ## Reproduce or supply private cases
+
+The Python comparison harness was removed in the Rust-only port; these were its
+historical commands:
 
 ```sh
 PYTHONPATH=src python3 benchmarks/compare.py --url http://localhost:21542

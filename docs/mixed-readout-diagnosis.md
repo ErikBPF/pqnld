@@ -10,6 +10,8 @@ Startup logs explicitly confirm `Using V2 Model Runner`.
 
 ## Reproducer and observed results
 
+Historical reproducer (the Python harness was removed in the Rust-only port):
+
 ```sh
 PYTHONPATH=src python3 benchmarks/mixed_readout.py --url http://localhost:21542
 ```
@@ -150,15 +152,16 @@ was closed. No engine patch or permanent configuration change was made.
 The human requires MTP for fast completions; decisions are a lower-priority
 capability on the same resident model. No-MTP is excluded from deployment.
 
-`build_examples/2x-rtx5060ti/prepare_mtp_patch.py` emits a source-checked unified
-diff for the inspected snapshot. It wires existing explicit-ID scoring into the
+The historical `build_examples/2x-rtx5060ti/prepare_mtp_patch.py` (removed in the
+Rust-only port) emits a source-checked unified diff for the inspected snapshot. It wires existing explicit-ID scoring into the
 V2 rejection sampler, passes expanded request mappings through each verification
 chunk, and includes explicit-ID dimensions in sharded output gathering. A global
 batch maximum keeps logprob column widths compatible across verification chunks.
 Ordinary requests without logprobs preserve the existing early exit. This is a
 candidate patch generator, not an installed engine change.
 
-`check_mtp_scores.py` extracts the installed scoring method and exercises routing
+`check_mtp_scores.py` (historical; removed in the Rust-only port) extracts the
+installed scoring method and exercises routing
 with CPU tensors, stubbed flattening and a recording scoring function. It failed
 against installed source with `speculative scorer lacks explicit-ID request
 mapping`, then passed against the proposed transformation in memory. Both modified
@@ -188,7 +191,8 @@ incorrect request-slot selection. The generator now buffers both transformations
 before output and explicitly enables ID gathering in the model runner. A focused
 test covers that transformation; distributed gathering remains unverified.
 
-`check_mtp_gpu.py` adds a numerical candidate-image check using real scorer kernels
+`check_mtp_gpu.py` (historical; removed in the Rust-only port) adds a numerical
+candidate-image check using real scorer kernels
 and a PyTorch log-softmax reference, including sampled columns, mixed ordinary and
 explicit-ID requests, and unequal accepted lengths. It was not executable while the
 serving GPUs had only 424-438 MiB free; see the executed run below.

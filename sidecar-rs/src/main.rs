@@ -29,6 +29,10 @@ use tokio::net::{TcpListener, UnixListener};
 use tokio::sync::{Mutex, Semaphore};
 
 mod engine;
+mod mcp;
+
+#[cfg(test)]
+mod tests_readout;
 
 use engine::{Engine, EngineError};
 
@@ -1131,6 +1135,12 @@ async fn main() {
         Mode::Lettered => "lettered",
         Mode::Echo => "echo",
     };
+
+    if args.iter().any(|a| a == "--mcp") {
+        eprintln!("pqnld-rs MCP stdio server -> {engine_url} (readout={mode_name})");
+        mcp::serve(ctx.clone()).await;
+        return;
+    }
 
     if let Some(uds_path) = uds.clone() {
         let _ = std::fs::remove_file(&uds_path);

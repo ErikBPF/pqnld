@@ -1,16 +1,18 @@
-# Codex MCP server that exposes pqnld's `decide` tool.
+# Codex MCP server exposing pqnld's `decide` tool.
 # Copy into ~/.codex/config.toml (user) or .codex/config.toml (trusted project).
 
 [mcp_servers.pqnld]
-command = "python3"
-args = ["/abs/path/to/pqnld/sidecar-rs/mcp_bridge.py"]
+command = "/abs/path/to/pqnld-rs"
+args = [
+  "--mcp",
+  "--vllm-url", "http://127.0.0.1:11542",
+  "--model", "qwen38-27b-nvfp4",
+  "--descriptor", "qwen38-27b-nvfp4",
+  "--models-dir", "/abs/path/to/pqnld/sidecar-rs/models",
+]
 startup_timeout_sec = 10
 tool_timeout_sec = 600
 enabled = true
 
-[mcp_servers.pqnld.env]
-PQNLD_SIDECAR_URL = "http://127.0.0.1:11560"
-PQNLD_MODEL = "qwen38-27b-nvfp4"
-
-# Equivalent one-liner:
-# codex mcp add pqnld -- python3 /abs/path/to/pqnld/sidecar-rs/mcp_bridge.py
+# Equivalent one-liner (after installing the binary on PATH):
+# codex mcp add pqnld -- pqnld-rs --mcp --models-dir /abs/path/to/pqnld/sidecar-rs/models

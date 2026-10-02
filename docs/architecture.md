@@ -40,7 +40,7 @@ without exact-token scoring.
 
 ## The lettered readout
 
-`_letter_scores(state, question, keys)`:
+Steps:
 
 1. Render `state`, the question instructions, and `letter) key-or-description`
    lines for each option, ending with "Reply with exactly one option letter."
@@ -62,8 +62,8 @@ held-out labeled data.
 
 ## The echo fallback
 
-`_echo_scores(context, keys)` for engines without exact-token scoring (or a
-forced-echo descriptor):
+The echo fallback for engines without exact-token scoring (or a forced-echo
+descriptor):
 
 1. Echo the context (`echo=true, max_tokens=0, logprobs=1`) to get its tokens.
 2. Echo each `context + key` in batches of `batch` (default 16) and sum the
@@ -91,10 +91,9 @@ reference launcher health-checks the engine before starting pqnld).
 
 ## Concurrency
 
-- The HTTP server is threaded (`ThreadingHTTPServer`), so requests are handled
-  concurrently.
+- The HTTP server handles requests concurrently.
 - Questions inside one decision are read **sequentially by default**
-  (`MAX_QUESTION_WORKERS = 1`), in submission order. The engine's batched decode
+  (`--workers 1`), in submission order. The engine's batched decode
   is not numerically identical to single-stream decode, and MTP adds variation
   across concurrent requests, so sequential execution is what makes repeated
   decisions reproducible. A worker bound opts back into concurrency.

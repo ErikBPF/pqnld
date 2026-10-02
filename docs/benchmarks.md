@@ -10,8 +10,8 @@ connector, `max_model_len` 200000, `gpu_memory_utilization` 0.90,
 locally built `localhost/apollo-qwen38-lmcache:trial`, based on
 `vllm/vllm-openai@sha256:5f5e535216848d0c52159c8c13a0af04be5f6fe1a84e79914300610796f76d40`
 plus two LMCache packed-KV patches; pqnld ran from source inside it. The raw
-receipts are kept in
-[`build_examples/2x-rtx5060ti/`](../build_examples/2x-rtx5060ti/README.md).
+receipts were kept under the Python-era `build_examples/2x-rtx5060ti/` directory,
+removed in the Rust-only port.
 
 ## The readout ladder
 
@@ -65,9 +65,9 @@ refuses to start at 4096 and 8192.
 
 ## Mixed load: long conversations + decisions
 
-`benchmarks/bench_mixed.py`, two ~95k-token conversations (1024 output tokens)
-with 100 interleaved one-question decisions, streamed so prefill (TTFT) and
-decode are measured separately:
+The historical Python `benchmarks/bench_mixed.py`, two ~95k-token conversations
+(1024 output tokens) with 100 interleaved one-question decisions, streamed so
+prefill (TTFT) and decode are measured separately:
 
 | Phase | Chats | TTFT | Decode TPS | Decisions |
 |---|---|---|---|---|
@@ -104,6 +104,11 @@ correctness-focused run: removing fabricated missing scores exposed incomplete
 label coverage and the reference engine's 20-logprob limit. Earlier successful
 request counts do not establish complete score coverage under the strict contract.
 
+The current tree ships only the Rust sidecar; run its tests with
+`cargo test --release --manifest-path sidecar-rs/Cargo.toml` (or `make test`).
+The measurements above came from a now-removed Python harness; its historical
+commands were:
+
 ```sh
 # concurrency + mixed chat/decision throughput
 python benchmarks/bench_parallel.py --each 4 --json parallel.json
@@ -113,8 +118,10 @@ python benchmarks/bench_mixed.py \
   --context-tokens 95000 --chat-max-tokens 1024 --decisions 100 --json mixed.json
 ```
 
-Both take `--selftest` and run with no GPU (they then simply report failures, or
-skip the live phase). Point them at your own `--decide-url` / `--chat-url`.
+Both took `--selftest` and ran with no GPU (they then simply reported failures,
+or skipped the live phase), pointed at a `--decide-url` / `--chat-url`. The
+scripts were removed in the Rust-only port; no current benchmark script is
+equivalent.
 # Readout follow-up
 
 See [the implementation and live-test one-pager](readout-one-pager.md): exact-token

@@ -1,14 +1,14 @@
 # Model descriptors
 
 A descriptor tells pqnld how to talk to a served model. It is a small JSON file,
-`models/<name>.json`, selected with `--descriptor NAME` (or `--model NAME` when
-no descriptor is given). Lookup order:
+`sidecar-rs/models/<name>.json`, selected with `--descriptor NAME` (or `--model
+NAME` when no descriptor is given). Lookup order:
 
-1. `--models-dir` (or `PQNLD_MODELS_DIR`), if set;
-2. otherwise the `models/` directory shipped inside the package.
+1. `--models-dir` (or `PQNLD_MODELS_DIR`), if set (e.g. `sidecar-rs/models`);
+2. otherwise the `models/` directory beside the binary.
 
-A missing file is not an error: pqnld falls back to the built-in defaults
-(`ModelSpec()`), which reproduce the reference Qwen3.8 behaviour.
+A missing file is not an error: pqnld falls back to the built-in defaults,
+which reproduce the reference Qwen3.8 behaviour.
 
 Unknown keys in the file are ignored, so a descriptor can carry extra notes
 without breaking.
@@ -59,10 +59,11 @@ context.
 
 ## Adding one
 
-1. Copy `src/pqnld/models/qwen38-27b-nvfp4.json`.
+1. Copy `sidecar-rs/models/qwen38-27b-nvfp4.json`.
 2. Set the chat template for your model exactly (a wrong template silently
    degrades the echo path; the lettered path is template-free because it uses the
    model's own chat endpoint).
-3. Serve it: `pqnld --model <served-name> --descriptor <name>`.
-4. Verify with `pqnld-tester` or a `curl` to `/v1/decide`, and note the engine
-   revision and flags you tested.
+3. Serve it: `pqnld-rs --model <served-name> --descriptor <name>
+   --models-dir sidecar-rs/models`.
+4. Verify with a `curl` to `/v1/decide` (or the MCP `decide` tool), and note the
+   engine revision and flags you tested.

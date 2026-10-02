@@ -19,9 +19,8 @@ Index sample; engine `/health` after; answer parity via `agree.py`.
   `Setting attention block size to 864 tokens to ensure that attention page size is >= mamba page size`;
   `kv cache group sizes [864, 864, 864, 864]`; `kv lcm block sizes 864`;
   LMCache `scheduler_block_size=864`.
-- The Python sidecar already records the consequence: *"this hybrid model's
-  unified block size (864) exceeds a decision prompt, so nothing is
-  prefix-cached"* (`src/pqnld/decision.py:11`).
+- The readout already records the consequence: *"this hybrid model's unified
+  block size (864) exceeds a decision prompt, so nothing is prefix-cached"*.
 - **Cache geometry is inert for fine-grained hits:** `hash_block_size ==
   block_size == 864`, so `Scheduler.mamba_partial_cache_hit` is `False`
   (`vllm/v1/core/sched/scheduler.py:361-364`), which forces
@@ -207,8 +206,8 @@ nondeterminism/correctness risk is real. Leave disabled.
    Run the 100-row sample sequentially through the existing canonical client
    (`--workers 1`):
    ```sh
-   $W/venv/bin/python -m decision_index pipeline --engine uds_engine:UdsSystemOne \
-     --option uds=/tmp/pqnld.sock --option model=qwen38-27b-nvfp4 \
+   $W/venv/bin/python -m decision_index pipeline --engine http \
+     --option base_url=http://127.0.0.1:11560 --option model=qwen38-27b-nvfp4 \
      --rows /work/sample-100.jsonl.gz --suite-dir /work/suite --edition 0.2.1 \
      --out /work/runs/<baseline-tag>
    ```

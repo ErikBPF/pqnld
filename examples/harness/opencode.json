@@ -3,13 +3,16 @@
   "mcp": {
     "pqnld": {
       "type": "local",
-      "command": ["python3", "/abs/path/to/pqnld/sidecar-rs/mcp_bridge.py"],
+      "command": [
+        "/abs/path/to/pqnld-rs",
+        "--mcp",
+        "--vllm-url", "http://127.0.0.1:11542",
+        "--model", "qwen38-27b-nvfp4",
+        "--descriptor", "qwen38-27b-nvfp4",
+        "--models-dir", "/abs/path/to/pqnld/sidecar-rs/models"
+      ],
       "enabled": true,
-      "timeout": 600000,
-      "environment": {
-        "PQNLD_SIDECAR_URL": "http://127.0.0.1:11560",
-        "PQNLD_MODEL": "qwen38-27b-nvfp4"
-      }
+      "timeout": 600000
     }
   }
 }

@@ -33,8 +33,8 @@ merge is lossless: overlapping IDs matched exactly (max abs logprob diff 0.0) in
 live checks. The suite's largest question is 151 options, so two requests cover
 it.
 
-`MAX_QUESTION_WORKERS` now defaults to 1. `--workers` on the Rust sidecar opts
-back into concurrency at the cost of reproducibility.
+Question execution now defaults to sequential (`--workers 1`). Raising `--workers`
+on the Rust sidecar opts back into concurrency at the cost of reproducibility.
 
 ## Evidence and limits
 
@@ -48,16 +48,17 @@ back into concurrency at the cost of reproducibility.
 | Readout latency | Per-question median ~258 ms; sidecar overhead ~25-30 ms (~5%) | Model/prefill-bound; single runs |
 | Rust vs Python sidecar | After the float-rendering and per-row ordering fixes, the full 100-row sample matches to **one ULP** (global max probability diff `5.6e-16`, zero choice changes) | Rewrite gain ~1-3%; workload is model-bound |
 | Determinism | Root cause is engine batch numerics + MTP, not the client: 16 identical batched questions → 4 distinct answers (persists with MTP off); 8 concurrent identical requests → 2 signatures with MTP, 1 without; sequential → 1 distinct and two full runs 100/100 identical | Sequential still not guaranteed reproducible under simultaneous real chat load |
-| Unit regressions | 49 tests pass; both benchmark self-tests pass | Canned scores establish plumbing, not calibration; existing socket/resource warnings remain |
+| Unit regressions (historical Python harness) | 49 tests pass; both benchmark self-tests pass | Canned scores establish plumbing, not calibration; existing socket/resource warnings remain |
 
 ## The Rust sidecar (canonical)
 
-`sidecar-rs/` is now the canonical implementation: a single static binary with
-**full parity** with the Python sidecar — exact-ID lettered and echo readouts,
-`auto` probe, LRU result cache, the `/v1/chat/completions` shim, descriptors and
-env/flags. `cargo build --release` (or `sidecar-rs/build.sh`); a musl target gives
-a fully static binary. Python `src/pqnld/decision.py` remains the reference
-implementation for the tests.
+`sidecar-rs/` is the implementation: a single static binary with **full parity**
+with the historical Python sidecar — exact-ID lettered and echo readouts, `auto`
+probe, LRU result cache, the `/v1/chat/completions` shim, descriptors and
+env/flags. Build with `cargo build --release` (or `make build`); a musl target
+gives a fully static binary. The Python reference implementation was removed in
+the Rust-only port; the Rust tests under `sidecar-rs/src` are the reference for
+the contract.
 
 **Multi-engine.** `sidecar-rs/src/engine.rs` puts the tokenize/score/top-k/echo
 surfaces behind one `Engine` trait with vLLM, llama.cpp, SGLang and OpenAI API
@@ -65,19 +66,20 @@ adapters (`--engine-kind`). The vLLM adapter is the only one exercised live;
 the others are compile- and parse-unit-tested. Capability tiers and the exact
 per-engine logprob limits are in [engine-capabilities.md](engine-capabilities.md).
 
-**Python-Rust parity.** On the full 100-row sample the two implementations now
-agree to **one ULP** (global max probability diff `5.6e-16`, zero choice changes).
+**Python-Rust parity (historical).** Before the Python implementation was removed,
+the two implementations agreed to **one ULP** on the full 100-row sample
+(global max probability diff `5.6e-16`, zero choice changes).
 Two real Rust defects were fixed to get there: a float-rendering difference
 (Python `repr` uses scientific notation for small floats, Rust `serde_json` used
 plain decimal and was not correctly rounded — fixed with `float_roundtrip` and a
 Python-compatible `PyFormatter`), and per-row question order under `--workers 1`
 (fixed to stored order). `cargo test --release` covers both.
 
-**Harness plugin.** `sidecar-rs/mcp_bridge.py` is an MCP stdio server exposing a
-`decide` tool over the sidecar's `/v1/systemone`, with config snippets for opencode
-and Codex in [harness-plugins.md](harness-plugins.md) and `examples/harness/`.
-A client-side or in-process shape removes the extra hop; a vLLM plugin would bind
-to vLLM internals.
+**Harness plugin.** `pqnld-rs --mcp` runs the MCP stdio server exposing a `decide`
+tool, with config snippets for opencode and Codex in
+[harness-plugins.md](harness-plugins.md) and `examples/harness/`. Running the
+binary itself in MCP mode replaces the old Python bridge process; a vLLM plugin
+would bind to vLLM internals.
 
 **Server-side levers** (not yet run) are ranked in
 [server-optimizations.md](server-optimizations.md): the engine's 864-token KV block
@@ -133,8 +135,9 @@ deployable default, unless vLLM gains per-request speculative control.
 
 ## What continues / what waits
 
-The candidate MTP patch generator, CPU control-flow checks and the executed GPU
-numerical check are under `build_examples/2x-rtx5060ti/`. Next: build a pinned
+The historical candidate MTP patch generator, CPU control-flow checks and the
+executed GPU numerical check were under `build_examples/2x-rtx5060ti/` (removed in
+the Rust-only port). Next: build a pinned
 candidate image from the patched source and rerun concurrent chat/decision checks
 plus GPU chunked/adaptive and TP2 gather cases. A sidecar-only lock cannot
 coordinate ordinary chat sent directly to the engine, so it is not a sound fix.

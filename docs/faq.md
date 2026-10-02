@@ -1,8 +1,8 @@
 # FAQ
 
 **Does pqnld need a GPU or a model to run?**
-No. It is a proxy over an endpoint. The unit tests and benchmark self-tests run
-with no GPU and no model at all.
+No. It is a proxy over an endpoint. The unit tests run with no GPU and no model
+at all.
 
 **Which models does it work with?**
 Anything served behind an OpenAI-compatible endpoint that exposes
@@ -25,8 +25,8 @@ one-question decision through pqnld matches a direct engine call.
 **Why is my throughput so low for long prompts?**
 Because prefill dominates. A ~100k-token prompt takes ~79 s to prefill on the
 reference rig, so total-wall TPS looks tiny. pqnld reports nothing about
-throughput; `bench_mixed.py` separates TTFT from decode TPS for exactly this
-reason.
+throughput; the historical mixed-load benchmark separated TTFT from decode TPS
+for exactly this reason.
 
 **Do decisions and chat really share one engine?**
 Yes. A decision is a `max_tokens=1` + `logprobs` chat request, so vLLM's

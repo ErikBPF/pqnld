@@ -1,6 +1,9 @@
 # Behavior contract for the decision readout sidecar (S0/S1/S2).
-# Automated: bound to test_decision_sidecar.py (stdlib unittest), which was
-# observed failing (ModuleNotFoundError) before decision_sidecar.py existed.
+# Automated: previously bound to the Python stdlib unittest test_decision_sidecar.py
+# (removed in the Rust-only port); the runnable regressions now live under
+# sidecar-rs/src (engine.rs unit tests, main.rs tests, tests_readout.rs
+# mock-engine tests) and run with
+# `cargo test --release --manifest-path sidecar-rs/Cargo.toml`.
 # Scenarios marked @unautomated are contract only; no step binding exists yet.
 # Seed: homelab/docs/plans/apollo-decision-model/one-pager.md, SHA256
 # recorded on the plan; seed quote: "add a small lora layer to this model or a
@@ -23,7 +26,8 @@
 # Cache is a bounded LRU keyed by model + descriptor + question.
 # DR-07 receipt: Apollo results/s2b-kit-results.jsonl, produced by run-s2-kit.sh.
 # DR-15 receipt: Apollo results/parallel.json and results/parallel-numseq8-*.json,
-# produced by bench_parallel.py. --max-num-seqs 2 / --each 4: parallelism 5.59 of 8,
+# produced by the historical Python bench_parallel.py (removed in the Rust-only
+# port). --max-num-seqs 2 / --each 4: parallelism 5.59 of 8,
 # 2.58 req/s. --max-num-seqs 8 / --each 4: parallelism 6.37, 5.74 req/s. / --each 8
 # (16 in flight): parallelism 10.49 of 16, 5.19 req/s. 0 failures in every run:
 # decisions and chat both complete while the engine batches them. DR-15 stays
@@ -155,8 +159,9 @@ Feature: Decision readout sidecar over a served Apollo model
     Then the sidecar returns a valid typed answer
     And a decision posted to the frozen kit's /v1/systemone alias also returns a valid typed answer
 
-  # Bound to tests/test_readout_integrity.py; five regressions observed failing
-  # before the strict-label, score-coverage and cache-order implementation.
+  # Bound to the readout regression tests in sidecar-rs/src/tests_readout.rs;
+  # five regressions observed failing before the strict-label, score-coverage and
+  # cache-order implementation.
   @DR-17
   Scenario: Words do not count as option labels
     Given the answer slot ranks a word above complete single-letter option scores

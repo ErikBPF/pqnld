@@ -83,14 +83,18 @@ See [benchmark evidence and repair status](docs/mixed-readout-diagnosis.md).
 
 ## Quickstart
 
+Grab the static binary from the
+[latest release](https://github.com/ErikBPF/pqnld/releases/latest), or build it:
+
 ```sh
-pip install pqnld
+cargo build --release --manifest-path sidecar-rs/Cargo.toml
 ```
 
 Start it against a running vLLM (or any) OpenAI server:
 
 ```sh
-pqnld --vllm-url http://127.0.0.1:8000 --model qwen38-27b-nvfp4
+./sidecar-rs/target/release/pqnld-rs --vllm-url http://127.0.0.1:8000 \
+  --model qwen38-27b-nvfp4 --models-dir sidecar-rs/models
 ```
 
 Ask a decision:
@@ -121,8 +125,8 @@ curl -sS http://127.0.0.1:11560/v1/decide -H 'content-type: application/json' -d
 }
 ```
 
-No GPU and no model are needed to try the HTTP surface: see
-`python -m unittest discover -s tests` (a stub vLLM backs the tests).
+No GPU and no model are needed to exercise the HTTP surface: `cargo test`
+drives it against a stub engine.
 
 ---
 
@@ -155,13 +159,13 @@ are reproducible; a worker bound allows opt-in concurrency, and identical
 repeated decisions are served from a bounded LRU cache keyed by model +
 descriptor + readout + request.
 
-### Rust binary
+### The binary
 
-`sidecar-rs/` is the canonical implementation: a single static binary serving
-the same wire contract, with no Python runtime. Build it with
-`cargo build --release --manifest-path sidecar-rs/Cargo.toml` (see
-[sidecar-rs/README.md](sidecar-rs/README.md)). `src/pqnld/decision.py` remains
-the reference implementation and backs the unit tests and benchmark self-tests.
+`sidecar-rs/` is the whole implementation: one static binary serving the wire
+contract, with no runtime dependency. Build it with
+`cargo build --release --manifest-path sidecar-rs/Cargo.toml`; `cargo test`
+covers the readout with no GPU (see
+[sidecar-rs/README.md](sidecar-rs/README.md)).
 
 See [docs/architecture.md](docs/architecture.md) for the details and the
 capacity ceiling.
@@ -185,7 +189,7 @@ Full schemas and errors: [docs/wire.md](docs/wire.md).
 
 Each model can be described by a `models/<name>.json` file (`--descriptor NAME`,
 or `--model NAME` as the fallback). A shipped example is
-[`src/pqnld/models/qwen38-27b-nvfp4.json`](src/pqnld/models/qwen38-27b-nvfp4.json).
+[`sidecar-rs/models/qwen38-27b-nvfp4.json`](sidecar-rs/models/qwen38-27b-nvfp4.json).
 
 ```json
 {
@@ -217,32 +221,8 @@ Server-side flags matter more than pqnld's:
   only for a decision-only window: when chat is the primary workload, keep MTP —
   this project treats MTP as mandatory, not something to disable permanently.
 
-See [docs/benchmarks.md](docs/benchmarks.md) for the measured trade-offs, and
-[`build_examples/`](build_examples/README.md) for the whole recipe on a real rig
-(2× RTX 5060 Ti) with the raw benchmark receipts.
-
----
-
-## Container
-
-```sh
-docker build -t pqnld:dev .
-docker run --rm -p 11560:11560 pqnld:dev \
-  --vllm-url http://host.docker.internal:8000 --host 0.0.0.0
-```
-
----
-
-## Tester (Swagger)
-
-`pqnld-tester` serves a small OpenAPI UI for a decision endpoint: `POST /decide`
-forwards a Decision Index request, `POST /complete` runs a plain chat completion.
-Requires the `tester` extra:
-
-```sh
-pip install "pqnld[tester]"
-PQNLD_BASE_URL=http://127.0.0.1:11560/v1 pqnld-tester   # http://127.0.0.1:8088/docs
-```
+See [docs/benchmarks.md](docs/benchmarks.md) for the measured trade-offs and the
+raw benchmark receipts from a 2× RTX 5060 Ti rig.
 
 ---
 
@@ -257,12 +237,9 @@ Index reproduction kit, so a stock kit HTTP engine can point at pqnld directly.
 ## Development
 
 ```sh
-make install      # editable install with dev + tester extras
-make test         # unit tests (no GPU)
-make selftest     # benchmark self-tests (no GPU)
-make test-all
-make build        # sdist + wheel
-make image
+make test       # unit tests (no GPU, no network)
+make build      # debug binary
+make release    # static x86_64-unknown-linux-musl binary
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

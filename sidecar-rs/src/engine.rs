@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+#[derive(Debug)]
 pub enum EngineError {
     Unsupported(String),
     Other(String),

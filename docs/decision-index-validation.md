@@ -34,11 +34,11 @@ Every exact-token question the engine was asked answered.
 
 ## Why the engine died
 
-The echo fallback (`_echo_scores`) posts `/v1/completions` with `echo=true`, so
+The echo fallback posts `/v1/completions` with `echo=true`, so
 vLLM computes **prompt logprobs for every prompt token**. Long state x many
 options allocates large per-token logits and OOMs EngineCore in
 `compute_prompt_logprobs` -> `logits_processor._gather_logits` ->
-`tensor_model_parallel_all_gather`. The exact-ID path (`_letter_scores`) is one
+`tensor_model_parallel_all_gather`. The exact-ID lettered path is one
 `/v1/chat/completions` with `max_tokens=1` and never computes prompt logprobs, so
 it is safe. This is an engine-capacity failure on the echo path, not PQNLD logic.
 
@@ -52,7 +52,7 @@ Levers found:
 - `--gpu-memory-utilization 0.80` leaves enough headroom for the echo path to
   complete the full sample without killing the engine.
 
-More sidecar RAM cannot fix this (the sidecar is a small stdlib process and the
+More sidecar RAM cannot fix this (the sidecar is a small process and the
 failure is GPU VRAM in the vLLM worker).
 
 ## Fix and determinism
@@ -65,11 +65,12 @@ Because the engine caps `logprob_token_ids` at 128 (hardcoded
 requests and the returned logprobs are merged; the merge is lossless (overlapping
 IDs matched exactly in live checks). The suite's maximum is 151 options.
 
-A Rust implementation of the same contract (`sidecar-rs/`) is the canonical
-implementation: a full-parity drop-in (lettered and echo readouts, `auto` probe,
-LRU cache, chat shim, descriptors, env/flags). It reproduced the Python
-sequential run 100/100 on the sample. `sidecar-rs/uds_engine.py` is the Decision
-Index client engine that reaches it over a Unix socket.
+`sidecar-rs/` is the implementation (Rust-only): a full-parity drop-in (lettered
+and echo readouts, `auto` probe, LRU cache, chat shim, descriptors, env/flags,
+and an MCP stdio server via `--mcp`). It reproduced the historical Python
+sequential run 100/100 on the sample. The Python Decision Index UDS client engine
+was removed in the Rust-only port; the binary's `--uds` socket remains available
+to an equivalent client.
 
 Run-to-run reproducibility depends on question concurrency, and the cause is the
 engine, not the client:
@@ -82,21 +83,21 @@ engine, not the client:
 - **MTP speculative decoding** adds run-to-run variation when independent
   concurrent requests are batched: 8 concurrent identical requests gave 2
   signatures with MTP on and 1 with MTP off.
-- With **sequential** execution (`MAX_QUESTION_WORKERS = 1`, or Rust
-  `--workers 1`) two full runs were 100/100 identical.
+- With **sequential** execution (`--workers 1`) two full runs were 100/100
+  identical.
 
 The deltas are tiny in absolute logprob terms and only flip near-ties. Sequential
 costs ~40% wall time on the 100-row sample (219 s vs ~155 s concurrent), so the
 default is sequential and concurrency is opt-in; a Decision Index score must be
 run sequentially.
 
-## Python-Rust parity
+## Python-Rust parity (historical)
 
-After the multi-engine refactor (`sidecar-rs/src/engine.rs`) two real Rust
-defects were found and fixed, and Python and Rust now agree to **one ULP** on the
-full 100-row sample with **zero choice changes** (global max probability diff
-`5.6e-16`; 27 rows differ only in the last float bit, which `agree.py`'s
-exact-string comparison counts as different).
+Before the Python implementation was removed, the multi-engine refactor
+(`sidecar-rs/src/engine.rs`) exposed two real Rust defects; once fixed, Python
+and Rust agreed to **one ULP** on the full 100-row sample with **zero choice
+changes** (global max probability diff `5.6e-16`; 27 rows differ only in the last
+float bit, which `agree.py`'s exact-string comparison counts as different).
 
 1. **Float rendering in the prompt.** Python's `repr`/`json.dumps` writes small
    floats in scientific notation (`7.249627201966407e-05`) while Rust
@@ -131,10 +132,10 @@ $W/venv/bin/python -m decision_index suite import --dir /work/suite \
 $W/venv/bin/python -m decision_index suite sample --dir /work/suite --n 100 --out /work/sample-100.jsonl.gz
 
 # sidecar (exact-token descriptor; engine binds the tailnet IP, not localhost)
-$W/pm.sh exec -d dibuild bash -c 'python3 /work/pqnld/src/pqnld/decision.py \
+$W/pm.sh exec -d dibuild bash -c 'pqnld-rs \
   --vllm-url http://100.77.14.27:11542 --model qwen38-27b-nvfp4 \
   --descriptor qwen38-27b-nvfp4 --models-dir /work/desc --host 127.0.0.1 --port 11560'
-# descriptor /work/desc/qwen38-27b-nvfp4.json = repo descriptor + "specific_token_scores": true
+# descriptor /work/desc/qwen38-27b-nvfp4.json = sidecar-rs/models descriptor + "specific_token_scores": true
 
 # score
 $W/venv/bin/python -m decision_index pipeline --engine http \
@@ -142,12 +143,9 @@ $W/venv/bin/python -m decision_index pipeline --engine http \
   --rows /work/sample-100.jsonl.gz --suite-dir /work/suite --edition 0.2.1 \
   --out /work/runs/http-80
 
-# Rust sidecar over a Unix socket (same contract): start pqnld-rs with --uds and
-# use the UDS client engine (sidecar-rs/uds_engine.py on the kit's import path).
-$W/venv/bin/python -m decision_index pipeline --engine uds_engine:UdsSystemOne \
-  --option uds=/tmp/pqnld.sock --option model=qwen38-27b-nvfp4 \
-  --rows /work/sample-100.jsonl.gz --suite-dir /work/suite --edition 0.2.1 \
-  --out /work/runs/http-uds
+# The Rust sidecar's --uds socket still works, but the Python UDS client engine
+# was removed in the Rust-only port; use the kit's http engine against the
+# sidecar's HTTP endpoint (as above).
 ```
 
 The `0.80` + `--max-model-len 32768` engine was only needed to survive the old
@@ -161,7 +159,7 @@ left untouched; no temp engine is required.
 - The `0.80` diagnostic workaround is no longer needed; the original container
   runs the full sample at `0.90`.
 - Decisions are sequential by default so results are reproducible. Concurrency
-  (`--workers` / `MAX_QUESTION_WORKERS`) trades reproducibility for speed.
+  (`--workers`) trades reproducibility for speed.
   Sequential execution is still not guaranteed reproducible under simultaneous
   real chat load.
 - To obtain a real `decision_index`, run a large share of the suite against a

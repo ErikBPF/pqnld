@@ -1,10 +1,10 @@
 # pqnld-rs
 
-A single static binary that serves the same decision wire contract as the
-Python sidecar (`POST /v1/decide`, alias `/v1/systemone`, plus a
-`/v1/chat/completions` shim and `GET /healthz`). It reads a served
+A single static binary that serves the decision wire contract
+(`POST /v1/decide`, alias `/v1/systemone`, plus a `/v1/chat/completions` shim
+and `GET /healthz`) or runs as an MCP stdio server (`--mcp`). It reads a served
 vLLM/OpenAI model's answer-slot logprobs over tokenizer-verified option labels
-and returns a typed distribution — no Python runtime, no venv.
+and returns a typed distribution — no runtime dependency.
 
 ## Build
 
@@ -41,6 +41,7 @@ pqnld-rs --vllm-url http://127.0.0.1:11542 \
 | `--models-dir` | `PQNLD_MODELS_DIR` (`DECISION_MODELS_DIR`) | `models` | Descriptor directory |
 | `--host` / `--port` | `PQNLD_HOST` / `PQNLD_PORT` | `127.0.0.1` / `11560` | TCP listener |
 | `--uds` | — | off | Also listen on a Unix domain socket |
+| `--mcp` | — | off | Serve the `decide` tool on MCP stdio instead of HTTP |
 | `--workers` | — | `1` | Concurrent questions per request |
 | `--temperature` | `PQNLD_TEMPERATURE` (`DECISION_TEMPERATURE`) | descriptor / `1.0` | Softmax temperature |
 | `--timeout` | — | `600` | Engine request timeout (s) |
@@ -55,16 +56,21 @@ can return different answer-slot logits depending on batch slot/position, and
 MTP speculative decoding adds run-to-run variation. Use `--workers > 1` only when
 reproducibility is not required.
 
+### MCP
+
+```sh
+pqnld-rs --mcp --models-dir ./models --vllm-url http://127.0.0.1:11542
+```
+
+Speaks newline-delimited JSON-RPC 2.0 on stdio and exposes one `decide` tool
+taking `{state, questions}`. See [`docs/harness-plugins.md`](../docs/harness-plugins.md)
+for opencode/Codex config.
+
 ## Descriptor
 
-Same `models/<name>.json` as the Python sidecar: `readout` (`lettered`|`echo`|
+`models/<name>.json`: `readout` (`lettered`|`echo`|
 `auto`), `letters`, `temperature`, `enable_thinking`, `system_prompt`,
 `letter_system_prompt`, `chat_template`, `engine_profile`,
 `specific_token_scores`. Set `specific_token_scores: true` to score
 explicit token ids (required for questions with more than 26 options, where the
 shared prompt is split across `ceil(n/128)` requests and merged).
-
-## Relation to the Python sidecar
-
-`pqnld-rs` is the canonical implementation. `src/pqnld/decision.py` remains the
-reference implementation and backs the unit tests and benchmark self-tests.

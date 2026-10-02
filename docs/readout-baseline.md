@@ -10,7 +10,8 @@ and order-sensitive caching on top of `f541536`. No deployment or engine flags
 were changed. Result caching was disabled; engine prefix-cache state was not
 controlled. Timings include tunnel overhead.
 
-Command after opening a local tunnel:
+Command after opening a local tunnel (historical; the Python harness was removed
+in the Rust-only port):
 
 ```sh
 PYTHONPATH=src python3 benchmarks/bench_readout.py --url http://127.0.0.1:21542

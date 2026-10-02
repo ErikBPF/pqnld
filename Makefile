@@ -1,31 +1,25 @@
-.PHONY: help install test selftest test-all build image run
+.PHONY: help build test release run mcp
 
 help:
-	@echo "make install   - editable install with dev extras and the tester"
-	@echo "make test      - unit tests (no GPU)"
-	@echo "make selftest  - benchmark self-tests (no GPU)"
-	@echo "make test-all  - test + selftest"
-	@echo "make build     - build sdist + wheel into dist/"
-	@echo "make image     - build the container image"
-	@echo "make run       - run the sidecar (pqnld)"
+	@echo "make build   - debug build of the Rust sidecar"
+	@echo "make test    - unit tests (no GPU, no network)"
+	@echo "make release - optimized static binary (x86_64-unknown-linux-musl)"
+	@echo "make run     - run the HTTP sidecar (needs an OpenAI-compatible engine)"
+	@echo "make mcp     - run the MCP stdio server"
 
-install:
-	python -m pip install -e ".[dev]"
-
-test:
-	python -m unittest discover -s tests -v
-
-selftest:
-	python benchmarks/bench_parallel.py --selftest
-	python benchmarks/bench_mixed.py --selftest
-
-test-all: test selftest
+MANIFEST = sidecar-rs/Cargo.toml
 
 build:
-	python -m build
+	cargo build --manifest-path $(MANIFEST)
 
-image:
-	docker build -t pqnld:dev .
+test:
+	cargo test --manifest-path $(MANIFEST)
+
+release:
+	cargo build --release --target x86_64-unknown-linux-musl --manifest-path $(MANIFEST)
 
 run:
-	python -m pqnld
+	cargo run --release --manifest-path $(MANIFEST) -- --vllm-url http://127.0.0.1:11542 --models-dir sidecar-rs/models
+
+mcp:
+	cargo run --release --manifest-path $(MANIFEST) -- --mcp --vllm-url http://127.0.0.1:11542 --models-dir sidecar-rs/models

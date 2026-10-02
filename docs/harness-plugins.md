@@ -1,7 +1,7 @@
 # Harness plugins: pqnld as a decision tool for any code harness
 
 **Stage / revision:** design / 1\
-**Status:** proposed; no harness code yet\
+**Status:** the MCP stdio server ships as `pqnld-rs --mcp`; the tiered parse/top-k fallbacks below remain design\
 **Owner / date:** PQNLD / 2026-10-01 UTC
 
 Goal: let a code harness (opencode, OpenAI Codex, or any MCP client) turn the
@@ -205,11 +205,16 @@ partial or invented answer (matching [wire.md](wire.md)):
   "mcp": {
     "pqnld": {
       "type": "local",
-      "command": ["python3", "/abs/path/sidecar-rs/mcp_bridge.py"],
+      "command": [
+        "/abs/path/to/pqnld-rs",
+        "--mcp",
+        "--vllm-url", "http://127.0.0.1:11542",
+        "--model", "qwen38-27b-nvfp4",
+        "--descriptor", "qwen38-27b-nvfp4",
+        "--models-dir", "/abs/path/to/pqnld/sidecar-rs/models"
+      ],
       "enabled": true,
-      "environment": {
-        "PQNLD_SIDECAR_URL": "http://127.0.0.1:11560"
-      }
+      "timeout": 600000
     }
   }
 }
@@ -224,18 +229,21 @@ plugin would export a `tool` named `decide` that calls the same endpoint
 
 ```toml
 [mcp_servers.pqnld]
-command = "python3"
-args = ["/abs/path/sidecar-rs/mcp_bridge.py"]
+command = "/abs/path/to/pqnld-rs"
+args = [
+  "--mcp",
+  "--vllm-url", "http://127.0.0.1:11542",
+  "--model", "qwen38-27b-nvfp4",
+  "--descriptor", "qwen38-27b-nvfp4",
+  "--models-dir", "/abs/path/to/pqnld/sidecar-rs/models",
+]
 startup_timeout_sec = 10
 tool_timeout_sec = 600
 enabled = true
-
-[mcp_servers.pqnld.env]
-PQNLD_SIDECAR_URL = "http://127.0.0.1:11560"
 ```
 
 Or generate the table with
-`codex mcp add pqnld -- python3 /abs/path/sidecar-rs/mcp_bridge.py`.
+`codex mcp add pqnld -- pqnld-rs --mcp --models-dir /abs/path/to/pqnld/sidecar-rs/models`.
 `tool_timeout_sec` must exceed the slowest decision (the sidecar default engine
 timeout is 600 s; decisions are sequential by default). Use `enabled_tools =
 ["decide"]` if the server later grows more tools.
@@ -274,43 +282,42 @@ the probe. A T2 request whose labels are not all returned, and any T1 request
 whose labels do not tokenize to distinct single tokens, is a `422 unsupported` —
 never a fabricated score.
 
-**Adapter environment / config.** The MCP server is configured by environment so
-the same snippet works in both harnesses:
+**Adapter environment / config.** `pqnld-rs --mcp` is configured by its flags
+(the `PQNLD_*` env equivalents are in `sidecar-rs/README.md`):
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `PQNLD_SIDECAR_URL` | bridge mode: running sidecar base URL | `http://127.0.0.1:11560` |
-| `PQNLD_ENGINE` | embedded mode: model endpoint base URL | `http://127.0.0.1:11542` |
+| `PQNLD_VLLM_URL` | model endpoint base URL | `http://127.0.0.1:11542` |
 | `PQNLD_MODEL` | served model id | `qwen38-27b` |
 | `PQNLD_DESCRIPTOR` | `models/<name>.json` descriptor | model name |
 | `PQNLD_MODELS_DIR` | descriptor directory | `models` |
-| `PQNLD_READOUT` | `auto`/`lettered`/`echo`/`parse` | `auto` |
 | `PQNLD_TEMPERATURE` | softmax temperature | descriptor / `1.0` |
-| `PQNLD_API_KEY` | bearer token for a hosted endpoint | unset |
+
+Plus `--mcp`, `--workers` (default `1`), and `--timeout` (default `600` s).
 
 Per endpoint:
 
-- **Local vLLM** — `PQNLD_ENGINE=http://127.0.0.1:11542`, `PQNLD_MODEL=<served
+- **Local vLLM** — `PQNLD_VLLM_URL=http://127.0.0.1:11542`, `PQNLD_MODEL=<served
   id>`, descriptor with `specific_token_scores: true`; no token. Selects T1.
-- **Hosted OpenAI** — `PQNLD_ENGINE=https://api.openai.com/v1`,
-  `PQNLD_MODEL=gpt-...`, `PQNLD_API_KEY=...`. No `/tokenize`, so detection lands
-  on T2; only <=20-option questions answer.
+- **Hosted OpenAI** — a design target:
+  `PQNLD_VLLM_URL=https://api.openai.com/v1`, `PQNLD_MODEL=gpt-...`. No
+  `/tokenize` and no explicit-id field, so detection lands on T2; only
+  <=20-option questions answer. The shipped OpenAI adapter is compile- and
+  parse-unit-tested, not exercised live.
 - **No-logprob provider** — T3; `decide` returns choices but no distribution.
 
 ## 5. Minimal implementation path
 
-1. **MCP stdio bridge (recommended first).** A ~100-line stdio<->HTTP proxy that
-   forwards `tools/call decide` to an already-running `pqnld-rs`/Python sidecar
-   `POST /v1/decide` and maps the errors above. Zero readout changes, so it
-   inherits T1/T2, the LRU cache, the `auto` probe, and the output self-check,
-   and both harnesses get a working `decide` tool today. A prototype lives at
-   `sidecar-rs/mcp_bridge.py` (it does not touch `sidecar-rs/src/main.rs`).
-2. **Embedded MCP server (portability).** Reuse the readout core directly
-   (`src/pqnld/decision.py` today, or a small library split of the Rust core) so
-   no separate sidecar process is required, and add the T3 parsed fallback plus
-   an explicit T2 top-k ceiling check. This is the step that makes "the
-   harness's own model, no extra service" true; it is also where the tiers in
-   section 4 are actually implemented.
+1. **MCP stdio server (shipped).** `pqnld-rs --mcp` serves `tools/call decide` on
+   stdio and talks to the engine directly, so it inherits T1/T2, the LRU cache,
+   the `auto` probe, and the output self-check, and both harnesses get a working
+   `decide` tool today. See the config snippets above and `examples/harness/`.
+   (The earlier Python stdio-to-HTTP bridge prototype was removed in the
+   Rust-only port.)
+2. **Embedded server (shipped as `--mcp`).** The binary reuses the readout core
+   directly, so no separate sidecar process is required. Still to add: the T3
+   parsed fallback and an explicit T2 top-k ceiling check — the tiers in section
+   4 are where those are implemented.
 3. **Harness-native wrapper (only if UX demands it).** An opencode plugin can add
    a `decide` tool that pre-fills `state` from the session context and avoids
    MCP catalog overhead. Codex has no plugin API, so it stays on MCP.

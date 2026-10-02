@@ -1,6 +1,8 @@
 # Engine capabilities for the pqnld readout
 
-**Status:** research / design only. No engine code changed; no Rust written.
+**Status:** the engine abstraction is implemented as the `Engine` trait in
+`sidecar-rs/src/engine.rs`; the vLLM adapter is exercised live, the others are
+compile- and parse-unit-tested. No engine code changed.
 **Owner / date:** PQNLD / 2026-10-01 UTC.
 **Question:** which inference servers can give pqnld the answer-slot label
 scores it needs, and what is the minimal client abstraction that drives all of
@@ -131,9 +133,10 @@ cannot guarantee coverage and must refuse when a label is absent; tier 3 means
 "typed answer without calibrated probabilities" and should be opt-in, not a
 silent fallback.
 
-## Proposed minimal abstraction
+## Minimal abstraction
 
-Signatures only (no Rust implementation):
+Implemented as the `Engine` trait in `sidecar-rs/src/engine.rs`; the signatures
+below mirror it:
 
 ```rust
 /// Where a server exposes answer-slot logprobs.
@@ -181,14 +184,16 @@ Readout selection, in order:
 5. **No logprobs at all**: constrained single-label parse (tier 3), explicit and
    distribution-free — or refuse, per descriptor policy.
 
-This is the same routing the canonical code already performs; the trait only
-lifts the vLLM-specific JSON out of `sidecar-rs/src/main.rs`:
+This is the same routing the canonical code performs; the trait lifts the
+vLLM-specific JSON out of `sidecar-rs/src/main.rs` into
+`sidecar-rs/src/engine.rs`:
 
-- `label_id` (`/tokenize`) → `Engine::tokenize` (main.rs:272).
+- `label_id` (`/tokenize`) → `Engine::tokenize` (engine.rs:269).
 - `letter_scores` `logprob_token_ids` / `return_tokens_as_token_ids`
-  (main.rs:460-463) → `Engine::score_token_ids`.
-- `letter_scores` `top_logprobs` branch (main.rs:488-520) → `Engine::topk`.
-- `echo` `/v1/completions` echo+logprobs (main.rs:393-402) → `Engine::prompt_logprobs`.
+  → `Engine::score_token_ids` (engine.rs:281).
+- `letter_scores` `top_logprobs` branch → `Engine::topk` (engine.rs:300).
+- `echo` `/v1/completions` echo+logprobs → `Engine::prompt_logprobs`
+  (engine.rs:308).
 
 ## Per-engine request/response shapes
 

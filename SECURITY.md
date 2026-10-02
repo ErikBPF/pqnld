@@ -5,7 +5,8 @@
 Please report suspected vulnerabilities privately, not in a public issue.
 
 - Open a private advisory: <https://github.com/ErikBPF/pqnld/security/advisories/new>
-- Or email the maintainer listed in `pyproject.toml`.
+- Or email the maintainer. The contact address is on the
+  <https://github.com/ErikBPF> profile.
 
 Include a description, a reproduction, and the impact you believe it has. You
 can expect an acknowledgement within a few days.

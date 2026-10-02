@@ -48,8 +48,8 @@ an individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement via the contact in
-`pyproject.toml`. All complaints will be reviewed and investigated promptly and
+reported to the community leaders responsible for enforcement via the private
+contact described in `SECURITY.md`. All complaints will be reviewed and investigated promptly and
 fairly. Community leaders will respect the privacy and security of the reporter
 of any incident.
 
