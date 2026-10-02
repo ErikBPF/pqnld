@@ -4,6 +4,11 @@ Use your existing LLM for fast completions and typed decisions when needed.
 pqnld reads model logprobs into a probability distribution over your options,
 without hosting a second model.
 
+pqnld is a **secondary decision capability for an LLM you already serve**, not a
+replacement for it. Keep your existing model for chat and generation and get
+typed, closed-set decisions out of the same endpoint, so you get more out of the
+infrastructure you already run without replacing it.
+
 Turn a compatible **vLLM / OpenAI-style endpoint** into a **typed decision engine** by
 reading the model's own answer-slot logprobs. No extra weights, no training, no
 fine-tuning.
@@ -47,6 +52,8 @@ See [benchmark evidence and repair status](docs/mixed-readout-diagnosis.md).
 
 **It isn't:**
 
+- A replacement for your chat or generation model. It does not write prose or
+  answer open-ended questions; it answers the typed decision you frame.
 - A reasoner. It does not chain thoughts, call tools, or emit prose. One pass
   decides — that is the whole trick, and the whole limit.
 - A `score` type, or free-form. `choice` (2–255) and `noul` only; anything else is
@@ -63,8 +70,9 @@ See [benchmark evidence and repair status](docs/mixed-readout-diagnosis.md).
   the next-token distribution over the options you provided and softmaxes it.
   An answer outside your option set is impossible; an incorrect choice is not.
 - **No new weights.** It is a wrapper over an endpoint you already run. If you
-  serve Qwen, Llama, Mistral, or anything else, you already have a decision
-  engine.
+  serve Qwen, Llama, Mistral, or anything else that exposes `logprobs`, you
+  already have the model for typed decisions; whether its decisions are accurate
+  is your calibration problem, not a new model's.
 - **Explicit uncertainty.** The output is a distribution over allowed labels.
   Validate calibration before using it for routing, triage, or confidence thresholds.
 - **One engine, two workloads.** A decision is just a `max_tokens=1` +
@@ -129,20 +137,31 @@ No GPU and no model are needed to try the HTTP surface: see
    non-letter tokens, requires every label to be present, and softmaxes with a
    per-model temperature. Missing label scores are refused with HTTP 422.
 
-Because a letter is a single token, options are independent and multi-token
-option keys cost nothing extra. Questions with **more than 26 options** cannot
-be labelled with one letter; those fall back to a chunked **echo** readout
-(echo the context, then each `context+key`, and sum the key-token
-log-probabilities).
+Because a label is a single token, options are independent and multi-token
+option keys cost nothing extra. Questions with **more than 26 options** use an
+extended, tokenizer-verified single-token alphabet; when the engine's
+per-request explicit-token cap (128) is exceeded the shared prompt is split
+across `ceil(n/128)` requests and the answer-slot scores are merged losslessly.
+The older chunked **echo** readout remains only for models without
+explicit-token scoring.
 
 At startup pqnld **probes the model**: with `readout: auto` it keeps the lettered
 path only when a single option letter really is the top token for a fixture, and
 otherwise forces the echo readout. A descriptor that asks for echo without a
 chat template is refused.
 
-Questions in one request are read in **parallel** (bounded by
-`MAX_QUESTION_WORKERS`), and identical repeated decisions are served from a
-bounded LRU cache keyed by model + descriptor + readout + request.
+Questions in one request are read **sequentially by default** so repeated runs
+are reproducible; a worker bound allows opt-in concurrency, and identical
+repeated decisions are served from a bounded LRU cache keyed by model +
+descriptor + readout + request.
+
+### Rust binary
+
+`sidecar-rs/` is the canonical implementation: a single static binary serving
+the same wire contract, with no Python runtime. Build it with
+`cargo build --release --manifest-path sidecar-rs/Cargo.toml` (see
+[sidecar-rs/README.md](sidecar-rs/README.md)). `src/pqnld/decision.py` remains
+the reference implementation and backs the unit tests and benchmark self-tests.
 
 See [docs/architecture.md](docs/architecture.md) for the details and the
 capacity ceiling.
@@ -194,7 +213,9 @@ Server-side flags matter more than pqnld's:
 - **Speculative decoding (`--speculative-config`, e.g. MTP)**: great for long
   completions, near-useless for one-token decisions, and it shrinks the
   per-step token budget. A lean profile (no spec decode, no KV connector) is
-  what pqnld's `engine_profile: lean` selects in the reference launcher.
+  what pqnld's `engine_profile: lean` selects in the reference launcher. Use it
+  only for a decision-only window: when chat is the primary workload, keep MTP —
+  this project treats MTP as mandatory, not something to disable permanently.
 
 See [docs/benchmarks.md](docs/benchmarks.md) for the measured trade-offs, and
 [`build_examples/`](build_examples/README.md) for the whole recipe on a real rig

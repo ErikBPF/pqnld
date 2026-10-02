@@ -349,18 +349,18 @@ class DecisionSidecarTest(unittest.TestCase):
             self.assertAlmostEqual(sum(body["answers"]["c"]["probabilities"].values()), 1.0, places=9)
         self.assertGreater(self.stub.max_in_flight, 1)
 
-    def test_questions_in_one_decision_read_concurrently(self):
+    def test_questions_in_one_decision_read_run_sequentially(self):
         self.reset_stub()
         self.stub.delay = 0.3
         questions = {
             "color": {"type": "choice", "instructions": "Which color?", "criteria": {"red": "red", "blue": "blue"}},
             "urgent": {"type": "noul", "instructions": "Is it urgent?"},
         }
-        status, body = self.decide("A parallel-read state.", questions)
+        status, body = self.decide("A sequential-read state.", questions)
         self.stub.delay = 0
         self.assertEqual(status, 200)
         self.assertEqual(set(body["answers"]), set(questions))
-        self.assertGreaterEqual(self.stub.max_in_flight, 2)
+        self.assertEqual(self.stub.max_in_flight, 1)
 
     def test_frozen_kit_alias_path_still_answers(self):
         status, body = self._post(

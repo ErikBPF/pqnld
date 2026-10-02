@@ -33,7 +33,10 @@ per question — and on a hybrid model whose unified block size exceeds the
 decision prompt, nothing is prefix-cached, so every option re-prefills. The
 lettered readout replaced it with one request.
 
-The echo path survives only where letters cannot: **more than 26 options**.
+More than 26 options no longer needs echo: they are relabelled with an extended,
+tokenizer-verified single-token alphabet and scored by explicit token ID, split
+across `ceil(n/128)` requests. The echo path now survives only for engines
+without exact-token scoring.
 
 ## The lettered readout
 
@@ -59,7 +62,8 @@ held-out labeled data.
 
 ## The echo fallback
 
-`_echo_scores(context, keys)` for >26 options (or a forced-echo descriptor):
+`_echo_scores(context, keys)` for engines without exact-token scoring (or a
+forced-echo descriptor):
 
 1. Echo the context (`echo=true, max_tokens=0, logprobs=1`) to get its tokens.
 2. Echo each `context + key` in batches of `batch` (default 16) and sum the
@@ -89,16 +93,16 @@ reference launcher health-checks the engine before starting pqnld).
 
 - The HTTP server is threaded (`ThreadingHTTPServer`), so requests are handled
   concurrently.
-- Questions inside one decision are read **in parallel** with a
-  `ThreadPoolExecutor`, bounded by `MAX_QUESTION_WORKERS` (8), then gathered in
-  submission order so answer order is stable.
+- Questions inside one decision are read **sequentially by default**
+  (`MAX_QUESTION_WORKERS = 1`), in submission order. The engine's batched decode
+  is not numerically identical to single-stream decode, and MTP adds variation
+  across concurrent requests, so sequential execution is what makes repeated
+  decisions reproducible. A worker bound opts back into concurrency.
 - The LRU cache is guarded by a lock.
 
-Note the engine's own behavior: tiny one-token requests are admitted to the
-batch in a ramp, so a two-question decision can cost about two scheduler steps
-(~2 × 0.12 s) even when the two reads are issued in parallel. The parallelism
-still helps when the engine has spare admission slots, and it prevents the host
-side from being the bottleneck.
+Sequential also matches the engine's admission ramp: tiny one-token requests are
+admitted a few at a time, so a multi-question decision costs about one scheduler
+step per question (~0.12 s each).
 
 ## Cache
 

@@ -96,6 +96,45 @@ class ReadoutIntegrityTest(unittest.TestCase):
             readout("item-13 is selected", self.questions(("item-1", "item-13")))
         readout._post.assert_not_called()
 
+    def large_question(self, n):
+        keys = [f"option-{i:03d}" for i in range(n)]
+        return {"q": {"type": "choice", "instructions": "Which option?",
+                      "criteria": {key: key for key in keys}}}
+
+    def test_over_128_options_split_the_prompt_and_merge_scores(self):
+        readout = self.readout([])
+        readout.spec.specific_token_scores = True
+        chat_bodies = []
+
+        def post(path, body):
+            if path == "/tokenize":
+                return {"tokens": [ord(body["prompt"])]}
+            self.assertEqual(path, "/v1/chat/completions")
+            chat_bodies.append({**body, "logprob_token_ids": list(body["logprob_token_ids"])})
+            ids = body["logprob_token_ids"]
+            return {"choices": [{"logprobs": {"content": [{
+                "token": f"token_id:{ids[0]}",
+                "top_logprobs": [
+                    {"token": f"token_id:{token_id}", "logprob": -float(position)}
+                    for position, token_id in enumerate(ids)
+                ],
+            }]}}], "usage": {"prompt_tokens": 7}}
+
+        readout._post = Mock(side_effect=post)
+        keys = [f"option-{i:03d}" for i in range(151)]
+        answer = readout("state", self.large_question(151))["answers"]["q"]
+        self.assertEqual(len(chat_bodies), 2)
+        self.assertEqual(len(chat_bodies[0]["logprob_token_ids"]), 128)
+        self.assertEqual(len(chat_bodies[1]["logprob_token_ids"]), 23)
+        self.assertFalse(
+            set(chat_bodies[0]["logprob_token_ids"]) & set(chat_bodies[1]["logprob_token_ids"])
+        )
+        prompt = chat_bodies[0]["messages"][1]["content"]
+        self.assertTrue(any(ord(char) > 127 for char in prompt))
+        self.assertEqual(set(answer["probabilities"]), set(keys))
+        self.assertAlmostEqual(sum(answer["probabilities"].values()), 1.0, places=9)
+        self.assertTrue(all(probability > 0 for probability in answer["probabilities"].values()))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,8 +11,9 @@
 # /v1/chat/completions request per question asks for exactly one option letter;
 # the sidecar reads the letter distribution at the answer slot, ignores
 # non-letter tokens, maps letters back to keys, and softmaxes. More than 26
-# options has no single-token label and falls back to the chunked echo readout
-# (echo the context, then echo each context+key and sum the key tokens). The
+# options use an extended, tokenizer-verified single-token alphabet and are
+# scored by explicit token ID, split across ceil(n/128) requests and merged; the
+# chunked echo readout remains only for engines without exact-token scoring. The
 # remaining ceiling is context capacity: a question whose options do not fit is
 # refused (422), never truncated.
 # Readout route is per-model: a models/<name>.json descriptor names the readout
@@ -95,10 +96,10 @@ Feature: Decision readout sidecar over a served Apollo model
     And the probabilities still sum to one
 
   @DR-09
-  Scenario: More options than letters falls back to the echo readout
+  Scenario: More options than letters uses the extended single-token alphabet
     Given a question with more options than there are single-token letters
-    When the readout sidecar answers the question
-    Then every option is scored by the chunked echo readout
+    When the readout sidecar answers the question with exact-token scoring
+    Then every option is scored by its exact token ID
     And the probabilities still sum to one
 
   @DR-10 @S1

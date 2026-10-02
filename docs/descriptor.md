@@ -32,8 +32,9 @@ without breaking.
   answer-slot distribution over those letters. One request per question, options
   independent. Preferred; needs a model whose answer slot is a letter.
 - **`echo`** — echo the context and each `context + key`, summing the key-token
-  log-probabilities. Used automatically for questions with more than 26 options,
-  and as the fallback when the lettered path does not fit the model.
+  log-probabilities. Used as the fallback when the lettered path does not fit the
+  model, and for engines without exact-token scoring (questions with more than 26
+  options use the extended single-token alphabet when exact IDs are available).
 - **`auto`** — probe at startup:
   1. Send a fixture choice (`red`/`blue`/`green`, expected `b`).
   2. Keep `lettered` **only if** the highest-logprob token at the answer slot is

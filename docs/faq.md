@@ -9,6 +9,12 @@ Anything served behind an OpenAI-compatible endpoint that exposes
 `logprobs`/`top_logprobs` on `/v1/chat/completions`. Add a descriptor for your
 model's chat template if you need the echo fallback.
 
+**Is pqnld a replacement for my LLM?**
+No. It is a secondary decision capability that runs on the model you already
+serve. Keep your existing LLM for chat and generation; pqnld adds typed,
+closed-set decisions on top of the same endpoint, so you get more out of the
+infrastructure you already run without replacing it.
+
 **Why is a decision ~0.12 s but 100 concurrent decisions take tens of seconds?**
 Those are different questions. A warm single decision is one prefill plus one
 step. Under load, every request queues behind the batch and the engine admits
@@ -33,7 +39,9 @@ Careful. Speculative decoding (e.g. MTP) speeds up long completions and does
 almost nothing for one-token decisions, while shrinking the per-step token
 budget. Lowering it helps decisions and hurts completions. If you want both, the
 clean option is two profiles (lean for decisions, full for chat); otherwise keep
-speculation and accept that concurrent decisions admit slower. See
+speculation and accept that concurrent decisions admit slower. When chat is the
+primary workload, keep MTP on — pqnld treats it as mandatory; a lean profile is
+a decision-only window. See
 [benchmarks.md](benchmarks.md).
 
 **A decision came back slow even though nothing else was running.**
@@ -42,9 +50,12 @@ order of magnitude faster and are also served from pqnld's own LRU when the
 request is byte-identical.
 
 **What about questions with more than 26 options?**
-There are no more single-token letters. Those questions use the echo fallback:
-echo the context, then each `context + key`, and sum the key-token
-log-probabilities. The batch size bounds memory.
+They are relabelled with a tokenizer-verified single-token alphabet (`a-z` for
+the first 26, then more ASCII/Greek/Cyrillic symbols), and the engine is asked
+for those exact token IDs. Because the engine caps explicit IDs at 128 per
+request, a prompt with more options is split across `ceil(n/128)` requests and
+the logprobs are merged losslessly. The echo fallback remains only for models
+without exact-token scoring.
 
 **Does it support the `score` question type?**
 No. pqnld supports `choice` (2–255 options) and `noul` (a yes-probability). An

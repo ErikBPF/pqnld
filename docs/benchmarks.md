@@ -124,3 +124,9 @@ exposed an upstream HTTP 500. The new scoring mode remains opt-in.
 
 The [four-arm live experiment](approach-comparison.md) compares exact label
 scores, constrained JSON, bounded analysis, and the existing echo baseline.
+# Decision Index validation
+
+The [Decision Index run](decision-index-validation.md) scores the readout against
+the official suite. Both full-sample runs completed once the engine's
+`--gpu-memory-utilization` was lowered; the original container is restored. The
+100-row sample is too small for a non-null `decision_index`.

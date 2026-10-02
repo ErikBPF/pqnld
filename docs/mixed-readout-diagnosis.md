@@ -190,9 +190,40 @@ test covers that transformation; distributed gathering remains unverified.
 
 `check_mtp_gpu.py` adds a numerical candidate-image check using real scorer kernels
 and a PyTorch log-softmax reference, including sampled columns, mixed ordinary and
-explicit-ID requests, and unequal accepted lengths. It has **not been executed**:
-the serving GPUs had only 424-438 MiB free. CPU routing passed with the candidate
-transformed in memory; the live engine is unchanged. A spare GPU or a coordinated
-maintenance window is required for GPU checks, image validation and serving tests.
-Real chunk concatenation, adaptive numerical checks and distributed gathering
-remain required before a deployment claim.
+explicit-ID requests, and unequal accepted lengths. It was not executable while the
+serving GPUs had only 424-438 MiB free; see the executed run below.
+
+## GPU numerical check executed (2026-10-01)
+
+In an authorized maintenance window the engine and cache containers were stopped
+(`podman stop`), freeing both GPUs to 15849/15835 MiB, and the candidate patch was
+applied to the installed source extracted from the running engine image
+`dce3794...` (vLLM 0.30.0). `prepare_mtp_patch.py` matched every anchor: +9 lines in
+`v1/worker/gpu/spec_decode/rejection_sampler.py`, -4 lines in
+`v1/worker/gpu/model_runner.py`. The patched files were bind-mounted over the
+installed modules in a one-off container from the same engine image, and
+`check_mtp_gpu.py` ran against real devices (`torch.cuda`, 2 GPUs).
+
+Result: **passed**. For `topk` in `(-1, 3)` the patched method produced the sampled
+column and explicit-ID columns, `-inf` padding, and `cu_num_generated_tokens`
+`[0,2,3,6]` matching the PyTorch `log_softmax` reference for mixed ordinary and
+explicit-ID requests with unequal accepted lengths.
+
+Reproducing GPU access required the host driver mapping, not just device nodes:
+
+- `-v /run/opengl-driver/lib:/usr/local/nvidia/lib64:ro` — supplies the host driver
+  (`libcuda.so.595.99.02`); the image's bundled compat `libcuda` is `580.95.05` and
+  mismatches the host, raising CUDA error 803.
+- `-v /nix/store:/nix/store:ro` — the firmware driver directory is a tree of
+  `/nix/store` symlinks; without it `libcuda.so.1` dangles and CUDA reports no driver.
+- `-e LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/cuda/lib64`,
+  `-e NVIDIA_VISIBLE_DEVICES=void`, and the nvidia device nodes.
+
+Engine and cache were restored with `podman start` immediately afterward; `/version`
+returned 0.30.0, `/health` 200, the cache reported healthy, and a chat completion
+succeeded. No installed files or images were permanently modified.
+
+Still unverified before any deployment claim: GPU-level chunk concatenation with
+unequal chunk widths, adaptive-verification numerics, distributed (TP2) sharded
+gathering, and end-to-end serving where one patched engine answers chat and
+exact-token decisions concurrently. Those need a candidate image build.

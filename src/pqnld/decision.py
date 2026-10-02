@@ -19,7 +19,12 @@ the lettered readout only when a single option letter is the top token for a
 fixture; otherwise it forces the echo readout. A descriptor that declares the
 echo readout without a chat template is refused.
 
-Questions with more than 26 options fall back to a chunked echo-score path.
+Models that support explicit-token scores can also answer questions with more
+than 26 options: the option set is relabelled with tokenizer-verified
+single-token symbols and scored with the same answer-slot readout, splitting the
+shared prompt across ceil(n/128) requests when the engine's per-request
+explicit-token cap is exceeded. Models without that support fall back to a
+chunked echo-score path above 26 options.
 
     pqnld --vllm-url http://127.0.0.1:11542 \
         --model qwen38-27b-nvfp4 --descriptor qwen38-27b-nvfp4
@@ -33,6 +38,7 @@ import argparse
 import json
 import math
 import os
+import string
 import threading
 import time
 import urllib.error
@@ -62,9 +68,25 @@ CHAT_TEMPLATE = (
 )
 
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
+# Single-token labels for questions with more than 26 options: lowercase first
+# (consistent with LETTERS), then uppercase, digits, punctuation and Greek and
+# Cyrillic letters. Each label is kept only if the tokenizer renders it as one
+# distinct token, so the exact set is resolved against the live tokenizer.
+EXTENDED_LABELS = (
+    string.ascii_lowercase
+    + string.ascii_uppercase
+    + string.digits
+    + string.punctuation
+    + "".join(chr(c) for c in range(0x391, 0x3AA))
+    + "".join(chr(c) for c in range(0x3B1, 0x3CA))
+    + "".join(chr(c) for c in range(0x410, 0x450))
+)
+# vLLM caps explicit logprob_token_ids per request (MAX_LOGPROB_TOKEN_IDS=128),
+# so wider option sets share one prompt across ceil(n/128) merged requests.
+MAX_LOGPROB_IDS = 128
 # Cap on questions read concurrently. Bounds engine load for 255-question
 # documents and keeps the echo fallback's memory (per-question batch) in check.
-MAX_QUESTION_WORKERS = 8
+MAX_QUESTION_WORKERS = 1
 
 PROBE_STATE = "The sky is blue."
 PROBE_QUESTION = {
@@ -292,24 +314,48 @@ class Readout:
             "logprobs": 1,
         })
 
+    def _label_id(self, label, required=True):
+        if label not in self._label_ids:
+            tokens = self._post("/tokenize", {
+                "model": self.model, "prompt": label, "add_special_tokens": False,
+            })["tokens"]
+            if len(tokens) != 1:
+                if required:
+                    raise Unsupported(f"option label {label!r} is not a single token")
+                return None
+            self._label_ids[label] = tokens[0]
+        return self._label_ids[label]
+
+    def _labels(self, count):
+        """Return `count` distinct single-token labels, in option order."""
+        if count <= len(self.letters):
+            return list(self.letters[:count])
+        labels, seen = [], set()
+        for char in EXTENDED_LABELS:
+            if len(labels) == count:
+                break
+            token_id = self._label_id(char, required=False)
+            if token_id is None or token_id in seen:
+                continue
+            seen.add(token_id)
+            labels.append(char)
+        if len(labels) < count:
+            raise Unsupported(
+                f"tokenizer has only {len(labels)} single-token option labels, need {count}"
+            )
+        return labels
+
     def _letter_scores(self, state, question, keys):
-        """One chat request; the answer-slot logprobs over the option letters."""
-        letters = self.letters[: len(keys)]
-        body = render_lettered(state, question, keys, letters)
+        """Answer-slot logprobs over the option labels; one or more chat requests."""
+        labels = self._labels(len(keys))
+        body = render_lettered(state, question, keys, labels)
         token_letters = {}
         if self.spec.specific_token_scores:
             with self._lock:
-                for letter in letters:
-                    if letter not in self._label_ids:
-                        tokens = self._post("/tokenize", {
-                            "model": self.model, "prompt": letter, "add_special_tokens": False,
-                        })["tokens"]
-                        if len(tokens) != 1:
-                            raise Unsupported(f"option label {letter!r} is not a single token")
-                        self._label_ids[letter] = tokens[0]
-                token_letters = {f"token_id:{self._label_ids[c]}": c for c in letters}
-            if len(token_letters) != len(letters):
-                raise Unsupported("option labels do not have distinct token IDs")
+                ids = [self._label_id(label) for label in labels]
+                if len(set(ids)) != len(ids):
+                    raise Unsupported("option labels do not have distinct token IDs")
+                token_letters = {f"token_id:{token_id}": label for label, token_id in zip(labels, ids)}
         request = {
             "model": self.model,
             "messages": [
@@ -323,28 +369,35 @@ class Readout:
             "chat_template_kwargs": {"enable_thinking": self.spec.enable_thinking},
         }
         if token_letters:
-            request.update(top_logprobs=0, logprob_token_ids=[self._label_ids[c] for c in letters],
-                           return_tokens_as_token_ids=True)
-        payload = self._post("/v1/chat/completions", request)
-        usage = payload.get("usage") or {}
-        logprobs = payload["choices"][0].get("logprobs")
-        content = (logprobs or {}).get("content") or []
-        if not content:
-            raise RuntimeError("chat response carried no logprobs at the answer slot")
-        top_logprobs = content[0].get("top_logprobs", [])
-        top_token = max(top_logprobs, key=lambda item: item["logprob"])["token"] if top_logprobs else None
-        if token_letters:
-            top_token = token_letters.get(content[0].get("token"), "")
-        by_letter = {}
-        for item in top_logprobs:
-            letter = (token_letters.get(item.get("token")) if token_letters
-                      else letter_of(item.get("token", "")))
-            if letter and letter in letters and letter not in by_letter:
-                by_letter[letter] = item["logprob"]
-        missing = [letter for letter in letters if letter not in by_letter]
+            request.update(top_logprobs=0, return_tokens_as_token_ids=True)
+            id_by_label = {label: self._label_ids[label] for label in labels}
+            chunks = [labels[start : start + MAX_LOGPROB_IDS] for start in range(0, len(labels), MAX_LOGPROB_IDS)]
+        else:
+            chunks = [labels]
+        by_label, usage, top_token = {}, {}, None
+        for chunk in chunks:
+            if token_letters:
+                request["logprob_token_ids"] = [id_by_label[label] for label in chunk]
+            payload = self._post("/v1/chat/completions", request)
+            usage = payload.get("usage") or usage
+            content = (payload["choices"][0].get("logprobs") or {}).get("content") or []
+            if not content:
+                raise RuntimeError("chat response carried no logprobs at the answer slot")
+            if top_token is None:
+                if token_letters:
+                    top_token = token_letters.get(content[0].get("token"), "")
+                else:
+                    items = content[0].get("top_logprobs", [])
+                    top_token = max(items, key=lambda item: item["logprob"])["token"] if items else None
+            for item in content[0].get("top_logprobs", []):
+                label = (token_letters.get(item.get("token")) if token_letters
+                         else letter_of(item.get("token", "")))
+                if label and label in labels and label not in by_label:
+                    by_label[label] = item["logprob"]
+        missing = [label for label in labels if label not in by_label]
         if missing:
             raise Unsupported(f"answer-slot logprobs missing option labels: {', '.join(missing)}")
-        return [by_letter[letter] for letter in letters], usage, top_token
+        return [by_label[label] for label in labels], usage, top_token
 
     def _echo_scores(self, context, keys):
         """Fallback for >26 options: summed key-token logprobs, chunked."""
@@ -426,7 +479,7 @@ class Readout:
             keys = ["false", "true"]
         else:
             raise Unsupported(f"{key}: unsupported question type {question_type!r}")
-        if len(keys) <= len(self.letters) and mode == "lettered":
+        if mode == "lettered" and (len(keys) <= len(self.letters) or self.spec.specific_token_scores):
             scores, usage, _ = self._letter_scores(state, question, keys)
         else:
             scores, usage = self._echo_scores(self._echo_context(state, question), keys)

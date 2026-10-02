@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "pqnld": {
+      "type": "local",
+      "command": ["python3", "/abs/path/to/pqnld/sidecar-rs/mcp_bridge.py"],
+      "enabled": true,
+      "timeout": 600000,
+      "environment": {
+        "PQNLD_SIDECAR_URL": "http://127.0.0.1:11560",
+        "PQNLD_MODEL": "qwen38-27b-nvfp4"
+      }
+    }
+  }
+}
