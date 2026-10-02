@@ -25,13 +25,7 @@ Consequences:
 - **No prompt-logprob memory** — nothing needs forced continuation scoring.
 - **One prefill per question.**
 
-### Why not score each option by echoing it?
-
-An earlier design echoed the context once, then each `context + option_key`, and
-summed the key-token log-probabilities. Accurate, but `n+1` full-context prefills
-per question — and on a hybrid model whose unified block size exceeds the
-decision prompt, nothing is prefix-cached, so every option re-prefills. The
-lettered readout replaced it with one request.
+### Large option sets
 
 With `specific_token_scores: true` and a compatible adapter, more than 26 options
 can use an extended, tokenizer-verified single-token alphabet and explicit token
@@ -71,7 +65,10 @@ descriptor):
    log-probabilities of the tokens after the shared prefix.
 3. Softmax the summed scores.
 
-The batch size bounds the prompt-logprob memory that can crash the engine.
+The batch size limits concurrent prompt-logprob work, but long prompts can still
+exhaust engine memory. Echo requires aligned finite evidence and a scored
+continuation; missing evidence is refused. Prefix-overlapping keys are unsupported,
+and continuation scores remain length-sensitive.
 
 ## Startup probe
 
@@ -88,8 +85,7 @@ is refused. With generic top-k scoring, that probe failure selects echo instead,
 which still requires a chat template and usable score evidence.
 
 The probe is best-effort: a transport error during the probe falls back to echo
-rather than refusing to start. Point the server at a healthy engine (the
-reference launcher health-checks the engine before starting pqnld).
+rather than refusing to start. Health-check the engine before serving requests.
 
 ## Concurrency
 
@@ -102,10 +98,6 @@ reference launcher health-checks the engine before starting pqnld).
   upstream requests already accepted. Engine batch numerics, MTP, restarts and
   cache state prevent a universal repeatability guarantee.
 - The LRU cache is guarded by a lock.
-
-Sequential also matches the engine's admission ramp: tiny one-token requests are
-admitted a few at a time, so a multi-question decision costs about one scheduler
-step per question (~0.12 s each).
 
 ## Cache
 
@@ -123,6 +115,10 @@ refused with `422` and the **model's own capacity message is preserved** — pqn
 never truncates and never guesses. A 255-option `choice` is the stress case.
 
 ## Validation
+
+Before engine access, pqnld validates required question fields, supported types
+and choice cardinality. Instructions and descriptions accept JSON values.
+Scoring temperature must be finite and positive.
 
 Before replying, pqnld checks its own output: answer keys match question keys,
 choice is inside the criteria, probabilities cover exactly the criteria and sum
@@ -142,7 +138,7 @@ duplicate mappings, and requests every label's score with `top_logprobs: 0`.
 It neither constrains sampling nor applies logit bias. Returned IDs must cover
 every label; uppercase and whitespace variants are not pooled into these events.
 
-This remains opt-in: Apollo vLLM 0.30.0 passed isolated tests but returned HTTP 500
-for decisions during simultaneous ordinary chat. See [the one-pager](readout-one-pager.md).
-Do not enable it for shared-chat production until that engine failure is fixed
-and mixed-load tests pass. Label probabilities still require held-out calibration.
+This remains opt-in. Shared-chat/MTP serving is not validated for production;
+mixed-load tests must pass before enabling it there. See
+[current serving status](readout-one-pager.md). Label probabilities still require
+held-out calibration.

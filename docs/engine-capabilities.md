@@ -1,16 +1,10 @@
 # Engine capabilities for the pqnld readout
 
 **Status:** the engine abstraction is implemented as the `Engine` trait in
-`sidecar-rs/src/engine.rs`; the vLLM adapter is exercised live, the others are
-compile- and parse-unit-tested. No engine code changed.
+[`sidecar-rs/src/engine.rs`](../sidecar-rs/src/engine.rs); the vLLM adapter is
+exercised live, the others are compile- and parse-unit-tested. Backend API
+research below is not a promise of live adapter compatibility.
 **Owner / date:** PQNLD / 2026-10-01 UTC.
-**Question:** which inference servers can give pqnld the answer-slot label
-scores it needs, and what is the minimal client abstraction that drives all of
-them?
-
-> "openpai" is read as **OpenAI, the API provider**. If OpenPAI (Microsoft's
-> cluster orchestrator) was intended, it is a deployment control plane with no
-> inference or logprob surface and is out of scope for a readout.
 
 ## Method and evidence
 
@@ -114,90 +108,44 @@ them?
 - No `/tokenize`; token ids exist only client-side (`tiktoken`) and are
   model-specific. No exact-ID scoring.
 
-## Degradation tiers
+## Current sidecar routing
 
-The readout picks the highest tier the endpoint advertises. Tiers 0–2 produce a
-probability distribution; tier 3 does not.
+The [readout implementation](../sidecar-rs/src/main.rs) supports `lettered`,
+`echo` and `auto`. Adapter capabilities are declared in code, not verified by
+universal capability autodetection. `--engine-kind auto` performs best-effort
+server-kind detection; readout `auto` probes lettered suitability and can select
+echo. Neither enables descriptor `specific_token_scores` automatically.
 
-| Tier | Needs | Guarantees | >26 options |
-|---|---|---|---|
-| **0 — exact IDs** | `tokenize` + `score_token_ids` | complete coverage by construction; labels are tokenizer-verified single distinct tokens; request chunked by `max_explicit_ids` (128) | yes (extended single-token labels, `ceil(n/128)` requests merged) |
-| **1 — generic top-k** | `top_k` | conditional distribution only over labels that land in the top-k; a missing label is a hard refusal (HTTP 422), never fabricated | unreliable; labels can miss the top-k |
-| **2 — echo / prompt logprobs** | `prompt_logprobs` + chat template | summed continuation logprobs; refuses prefix-overlapping keys | yes (this is the existing >26 fallback) |
-| **3 — constrained parse** | chat text only | **no distribution**: ask for one label, parse the reply, report a point answer (degenerate mass) | no |
-| **— none** | — | refuse (422); no probabilities, no guesses | no |
+| Route | Requirements and behavior |
+|---|---|
+| Lettered exact IDs | Explicit `specific_token_scores: true` and compatible adapter; distinct single-token labels; complete returned label scores or refusal |
+| Lettered top-k | Exact opt-in inactive/unavailable; accepts only label-shaped tokens and requires every label returned, or refuses |
+| Echo | Selected echo mode, or questions exceeding the configured letter alphabet without exact opt-in; requires chat template and prompt-logprob support |
+| Parse | Unsupported; no point-answer downgrade or fabricated probability fallback |
 
-Consequences of the tiers that already hold in the code: tier 0 is the only one
-that turns "ask for N labels" into a guaranteed complete score set; tier 1
-cannot guarantee coverage and must refuse when a label is absent; tier 3 means
-"typed answer without calibrated probabilities" and should be opt-in, not a
-silent fallback.
+Exact scoring uses **128-ID chunks of the same prompt**, not an arbitrary
+per-adapter chunk size. Merging assumes absolute comparable full-vocabulary
+scores at the same conditioned slot. The wire allows **255 criteria keys**;
+the reference tokenizer yielded **206 usable single-token labels**, not any N.
+Exact scoring is opt-in, absent from the shipped descriptor, and retains the
+[mixed-MTP serving gate](mixed-readout-diagnosis.md).
 
-## Minimal abstraction
+Echo requires aligned, non-empty usable evidence, with finite scored tokens
+(the first context token may be unscored) and non-empty scored continuations.
+Prefix-overlapping keys are refused; large prompts retain capacity/memory risk.
+Normalization requires finite positive temperature; normalized scores are not
+established calibrated correctness probabilities.
 
-Implemented as the `Engine` trait in `sidecar-rs/src/engine.rs`; the signatures
-below mirror it:
-
-```rust
-/// Where a server exposes answer-slot logprobs.
-enum Surface { ChatCompletions, Completions, NativeGenerate, Score }
-
-/// One capability probe per engine, done once at startup.
-struct Capabilities {
-    tokenize: bool,           // text -> token ids endpoint exists
-    exact_ids: bool,          // caller-supplied token-id set can be scored
-    top_k: bool,              // engine top-k by text can be scored
-    prompt_logprobs: bool,    // prompt/continuation tokens (echo) can be scored
-    max_top_k: Option<usize>, // None = server-defined / unbounded
-    max_explicit_ids: Option<usize>,
-    surface: Surface,         // where the answer-slot request is sent
-}
-
-/// One answer-slot query. `chat=true` -> render system+body on the chat
-/// surface; `chat=false` -> `body` is already a raw prompt (echo).
-struct Query<'a> {
-    system: &'a str,
-    body: &'a str,
-    chat: bool,
-}
-
-trait Engine: Send + Sync {
-    fn name(&self) -> &'static str;
-    fn capabilities(&self) -> Capabilities;
-    fn tokenize(&self, text: &str) -> Option<Vec<u32>>;
-    fn score_token_ids(&self, q: &Query, ids: &[u32]) -> Option<Vec<(u32, f64)>>;
-    fn topk(&self, q: &Query, k: usize) -> Option<Vec<(String, f64)>>;
-    fn prompt_logprobs(&self, raw_prompt: &str) -> Option<Vec<(String, f64)>>;
-}
-```
-
-Readout selection, in order:
-
-1. **Lettered, exact IDs available** (`exact_ids && tokenize`): resolve every
-   label with `tokenize`; require one distinct id each; call `score_token_ids`
-   in chunks of `max_explicit_ids.unwrap_or(128)`; merge by id.
-2. **Lettered, top-k available**: call `topk(q, max(keys, 20))`; keep entries
-   whose text is a single label; require complete coverage or refuse.
-3. **>26 options**: exact IDs first (extended single-token labels); else echo
-   via `prompt_logprobs`; else refuse.
-4. **Echo descriptor**: `prompt_logprobs` or refuse.
-5. **No logprobs at all**: constrained single-label parse (tier 3), explicit and
-   distribution-free — or refuse, per descriptor policy.
-
-This is the same routing the canonical code performs; the trait lifts the
-vLLM-specific JSON out of `sidecar-rs/src/main.rs` into
-`sidecar-rs/src/engine.rs`:
-
-- `label_id` (`/tokenize`) → `Engine::tokenize` (engine.rs:269).
-- `letter_scores` `logprob_token_ids` / `return_tokens_as_token_ids`
-  → `Engine::score_token_ids` (engine.rs:281).
-- `letter_scores` `top_logprobs` branch → `Engine::topk` (engine.rs:300).
-- `echo` `/v1/completions` echo+logprobs → `Engine::prompt_logprobs`
-  (engine.rs:308).
+The actual asynchronous `Engine` signatures, adapters and response parsers live
+in [engine.rs](../sidecar-rs/src/engine.rs).
 
 ## Per-engine request/response shapes
 
-### vLLM — exact IDs (tier 0, canonical)
+These are illustrative researched API shapes. Current adapters use llama.cpp's
+native `/completion` and SGLang's `/generate`, not every surface listed below.
+Non-vLLM shapes remain unverified live against the sidecar.
+
+### vLLM — exact IDs (opt-in)
 
 ```json
 POST /v1/chat/completions
@@ -215,11 +163,11 @@ POST /v1/chat/completions
     {"token":"token_id:65","logprob":-4.0,"bytes":[…]}]}]}}]}
 ```
 
-### vLLM — generic top-k (tier 1) / echo (tier 2)
+### vLLM — generic top-k / echo
 
 ```json
 POST /v1/chat/completions
-{"…","max_tokens":1,"temperature":0,"logprobs":true,"top_logprobs":26}
+{"…","max_tokens":1,"temperature":0,"logprobs":true,"top_logprobs":20}
 {"choices":[{"logprobs":{"content":[{"token":"b","top_logprobs":[{"token":"b","logprob":-0.1},…]}]}}]}
 
 POST /v1/completions
@@ -227,7 +175,10 @@ POST /v1/completions
 {"choices":[{"logprobs":{"tokens":["…"],"token_logprobs":[…],"top_logprobs":[…]}}]}
 ```
 
-### llama.cpp — top-k only (tiers 1/2-via-top-k)
+The researched server's default top-k cap is 20. Requests above the configured
+cap fail; even an accepted request must return every label for sidecar success.
+
+### llama.cpp — top-k only
 
 ```json
 POST /v1/chat/completions
@@ -266,7 +217,7 @@ POST /v1/chat/completions
  "logprobs":true,"top_logprobs":32}
 ```
 
-### OpenAI — top-k chat (tier 1) and legacy echo (tier 2)
+### OpenAI — top-k chat and legacy echo
 
 ```json
 POST /v1/chat/completions
@@ -281,22 +232,23 @@ POST /v1/completions
   "top_logprobs":[…],"text_offset":[…]}}]}
 ```
 
-OpenAI cannot do exact IDs and has no `/tokenize`. Tier 0 is unavailable; use
-top-k (chat) or echo (legacy completions, `logprobs<=5`).
+OpenAI cannot do exact IDs and has no `/tokenize`. Exact scoring is unavailable;
+use top-k (chat) or echo (legacy completions, `logprobs<=5`).
 
 ## Mapping summary
 
-| Engine | Best tier | Exact-ID field | Tokenize | Echo/prompt-logprobs |
+| Researched engine API | Score surface | Exact-ID field | Tokenize | Echo/prompt-logprobs |
 |---|---|---|---|---|
-| vLLM | 0 | `logprob_token_ids` (+`return_tokens_as_token_ids`) | `/tokenize` | `/v1/completions` `echo:true` |
-| llama.cpp | 1 | — | `/tokenize` | native endpoint has no echo |
-| SGLang | 0 | `/generate` `token_ids_logprob`; `/v1/score` `label_token_ids` | `/tokenize` | `/generate` `logprob_start_len:0` |
-| OpenAI | 1 | — | none | legacy `/v1/completions` `echo:true`, `logprobs<=5` |
+| vLLM | exact IDs / top-k | `logprob_token_ids` (+`return_tokens_as_token_ids`) | `/tokenize` | `/v1/completions` `echo:true` |
+| llama.cpp | top-k | — | `/tokenize` | native endpoint has no echo |
+| SGLang | exact IDs / top-k | `/generate` `token_ids_logprob`; `/v1/score` `label_token_ids` | `/tokenize` | `/generate` `logprob_start_len:0` |
+| OpenAI | top-k | — | none | legacy `/v1/completions` `echo:true`, `logprobs<=5` |
 
-Unresolved / to verify before implementing: SGLang's OpenAI chat coverage for
-top-k (`top_logprobs`) under reasoning models; whether OpenAI's newer reasoning
-models accept `logprobs`/`top_logprobs` at all; llama.cpp `n_probs` behaviour at
-very large k; and the vLLM explicit-ID defect under MTP remains the blocking
-gate for tier 0 on Apollo (see [mixed-readout-diagnosis.md](mixed-readout-diagnosis.md)).
+Unresolved / to verify before claiming live adapter support: SGLang's OpenAI
+chat coverage for top-k (`top_logprobs`) under reasoning models; whether OpenAI's
+newer reasoning models accept `logprobs`/`top_logprobs` at all; llama.cpp `n_probs`
+behaviour at very large k. The vLLM explicit-ID defect under MTP remains the
+blocking gate for exact-ID shared serving on Apollo; see
+[mixed-readout-diagnosis.md](mixed-readout-diagnosis.md).
 Do not build a server-side SGLang `/v1/decisions` fast path yet — it is a
 different conditioning path and needs its own correctness evidence.

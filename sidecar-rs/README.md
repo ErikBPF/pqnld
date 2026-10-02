@@ -48,8 +48,7 @@ pqnld-rs --vllm-url http://127.0.0.1:11542 \
 
 **UDS safety limit:** existing startup code removes the supplied UDS path without
 checking that it is a socket. Do not point `--uds` at a pre-existing regular file
-or other non-socket path. This repair's verification uses TCP; UDS path protection
-remains a separate follow-up.
+or other non-socket path.
 
 ## Determinism
 
@@ -60,9 +59,8 @@ cancel and drain their remaining local tasks, reclaiming worker permits.
 
 This is not engine-wide determinism: ordinary chat sent directly to the model
 is outside the budget, and cancellation cannot unsend an upstream request already
-accepted. Batch numerics, MTP, engine restarts and result caching affect what
-repeatability observations mean. Two isolated historical sample runs had identical
-answers, not a guarantee that future runs are byte-identical.
+accepted. Batch numerics, MTP, engine restarts and result caching prevent a
+universal repeatability guarantee.
 
 ### MCP
 

@@ -37,7 +37,7 @@ batching — no second model to host.
 path drops requested scores during concurrent chat; the proposed scorer passed a
 GPU component check, but patched-server mixed-load verification remains pending.
 MTP remains required for the primary completions workload.
-See [benchmark evidence and repair status](docs/mixed-readout-diagnosis.md).
+See [current serving status](docs/readout-one-pager.md).
 
 > The name is the point. **P**arallel **Q**uery **N**ode, **L**ogit **D**ecisions
 > — and, if you tilt your head, *¿por qué no los dos?* Why not both: chat and
@@ -95,7 +95,7 @@ Grab the static binary from the
 cargo build --release --manifest-path sidecar-rs/Cargo.toml
 ```
 
-This quickstart targets historically tested vLLM. Other adapters require
+This quickstart targets the tested vLLM adapter. Other adapters require
 backend-specific compatibility verification; hosted OpenAI is not currently a
 verified drop-in target.
 
@@ -154,38 +154,37 @@ option keys do not require scoring their full text on the lettered path. With
 questions with **more than 26 options** use an extended, tokenizer-verified
 single-token alphabet. Above the explicit-ID cap (128), the same rendered prompt
 is sent in `ceil(n/128)` requests and absolute answer-slot logprobs are merged.
-Historical overlap checks matched exactly; this requires comparable full-vocabulary
-scores from every request, not per-chunk normalized scores. Exact-ID scoring is
+Merging requires comparable full-vocabulary scores from every request, not
+per-chunk normalized scores. Exact-ID scoring is
 opt-in; the shipped descriptor does not enable it. Without it, large questions
-may still use the older chunked **echo** path.
+may use the chunked **echo** path.
 
-The historical vLLM echo workload OOM-crashed the engine on long prompts. Validate
-backend capacity before using that fallback for large questions; do not treat the
-255-option wire ceiling as a production-serving guarantee.
+Echo can exhaust prompt-logprob memory on long prompts. Validate backend capacity
+before using it for large questions; the 255-option wire ceiling is not a
+production-serving guarantee.
 
 At startup pqnld **probes the model**: with `readout: auto` it keeps the lettered
 path only when a single option letter really is the top token for a fixture, and
 otherwise forces the echo readout. A descriptor that asks for echo without a
 chat template is refused.
 
-Questions in one request are read **sequentially by default**. This produced
-identical outputs in two isolated historical sample runs, not a universal
-reproducibility guarantee: direct engine chat and engine restarts can change
-scores. `--workers N` now bounds sidecar scoring globally across clients, including
+Questions in one request are read **sequentially by default**. `--workers N`
+bounds sidecar scoring globally across clients, including
 readout probes; at one worker each request retains stored question order. This
 does not govern chat sent directly to the engine. Failed concurrent decisions
 cancel and drain their remaining local tasks, but cannot unsend upstream requests.
 Raising the worker bound allows opt-in question concurrency, and identical
 repeated decisions are served from a bounded LRU cache keyed by model +
-descriptor + readout + request.
+descriptor + readout + request. Shared engine load, restarts and cache state
+prevent a universal repeatability guarantee.
 
 ### Reliability versus decision quality
 
 Valid typed answers and genuine score evidence do not guarantee correct decisions.
 Task accuracy depends on the model, prompt, readout and backend together; poor
 accuracy alone does not identify a tool defect or establish a model-capacity limit.
-The repaired 100-request sample completed without errors and matched historical
-answers, with mixed native task quality. See [the evaluation](docs/decision-index-quality.md)
+The pinned 100-request sample completed without errors, with mixed native task
+quality. See [the evaluation](docs/decision-index-quality.md)
 for task metrics, tiny-sample limits and unproven calibration.
 
 ### The binary
@@ -238,20 +237,16 @@ Fields, resolution, and the auto-probe contract: [docs/descriptor.md](docs/descr
 
 Server-side flags matter more than pqnld's:
 
-- **`--max-num-seqs`**: the number of sequences batched per step. At `2` tiny
-  `max_tokens=1` decisions admit slowly under load; `8` more than doubled
-  mixed-load throughput in our measurements.
+- **`--max-num-seqs`** controls the engine's sequence budget. Tune it for the
+  shared chat/decision workload and available memory.
 - **`--enable-prefix-caching`**: makes agentic multi-turn loops cheap — only the
   new delta is prefilled.
-- **Speculative decoding (`--speculative-config`, e.g. MTP)**: great for long
-  completions, near-useless for one-token decisions, and it shrinks the
-  per-step token budget. A lean profile (no spec decode, no KV connector) is
-  what pqnld's `engine_profile: lean` selects in the reference launcher. Use it
-  only for a decision-only window: when chat is the primary workload, keep MTP —
-  this project treats MTP as mandatory, not something to disable permanently.
+- **Speculative decoding (`--speculative-config`, e.g. MTP)** benefits long
+  completions more than one-token decisions. Chat is the primary workload: keep
+  MTP enabled. pqnld does not configure the engine or apply `engine_profile`.
 
-See [docs/benchmarks.md](docs/benchmarks.md) for the measured trade-offs and the
-raw benchmark receipts from a 2× RTX 5060 Ti rig.
+Current validation is in [docs/decision-index-quality.md](docs/decision-index-quality.md).
+[Archived rig measurements](docs/benchmarks.md) remain available for reference.
 
 ---
 

@@ -1,4 +1,10 @@
-# Benchmarks
+# Archived engine measurements
+
+These measurements record a Python-era rig, not current serving guarantees or
+runnable reproduction commands. For the pinned Rust sample and native task
+metrics, see [current evaluation](decision-index-quality.md).
+Historical success counts do not establish complete label-score coverage under
+the [current readout contract](wire.md).
 
 All numbers are **measured on the reference rig** and are directional, not
 guarantees. Your model, GPU, and flags dominate the result.
@@ -97,43 +103,14 @@ so with prefix caching (plus a KV connector) only the delta is prefilled and
 per-turn TTFT collapses to sub-second. The absolute numbers shrink; the
 contention with long generations remains.
 
-## Reproduce
+## Current validation
 
-The [strict readout smoke baseline](readout-baseline.md) records a later
-correctness-focused run: removing fabricated missing scores exposed incomplete
-label coverage and the reference engine's 20-logprob limit. Earlier successful
-request counts do not establish complete score coverage under the strict contract.
+The current tree ships the Rust sidecar. `make test` and
+`cargo test --release --manifest-path sidecar-rs/Cargo.toml` cover its readout
+contract; no equivalent current mixed-load benchmark script is shipped.
 
-The current tree ships only the Rust sidecar; run its tests with
-`cargo test --release --manifest-path sidecar-rs/Cargo.toml` (or `make test`).
-The measurements above came from a now-removed Python harness; its historical
-commands were:
-
-```sh
-# concurrency + mixed chat/decision throughput
-python benchmarks/bench_parallel.py --each 4 --json parallel.json
-
-# long conversation vs decisions
-python benchmarks/bench_mixed.py \
-  --context-tokens 95000 --chat-max-tokens 1024 --decisions 100 --json mixed.json
-```
-
-Both took `--selftest` and ran with no GPU (they then simply reported failures,
-or skipped the live phase), pointed at a `--decide-url` / `--chat-url`. The
-scripts were removed in the Rust-only port; no current benchmark script is
-equivalent.
-# Readout follow-up
-
-See [the implementation and live-test one-pager](readout-one-pager.md): exact-token
-scoring answered all ten isolated synthetic cases, but simultaneous ordinary chat
-exposed an upstream HTTP 500. The new scoring mode remains opt-in.
-# Approach comparison
-
-The [four-arm live experiment](approach-comparison.md) compares exact label
-scores, constrained JSON, bounded analysis, and the existing echo baseline.
-# Decision Index validation
-
-The [Decision Index run](decision-index-validation.md) scores the readout against
-the official suite. Both full-sample runs completed once the engine's
-`--gpu-memory-utilization` was lowered; the original container is restored. The
-100-row sample is too small for a non-null `decision_index`.
+The pinned Decision Index sample completed 100/100 requests without errors or
+refusals. The official index is 0.0 and the suite is incomplete; this is not zero
+sample accuracy. Native task metrics and coverage are in
+[the quality report](decision-index-quality.md); remaining serving limits are in
+[current readout status](readout-one-pager.md).

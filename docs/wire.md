@@ -36,11 +36,8 @@ Request:
   Choice `criteria` is an object with 2–255 keys. A `null` description prints its
   key. The wire ceiling does not guarantee enough tokenizer labels.
 
-The reliability repair refuses missing instructions and malformed criteria with
-422 before probing/scoring. The initial string-only proposal was superseded by
-Q-PQNLD-5: structured values used by the official corpus remain supported, and MCP
-schema is aligned with that existing HTTP renderer. Structured JSON `state` and
-valid answer envelopes remain supported.
+Invalid questions return 422 before engine access. HTTP and MCP use the same
+question validation rules.
 
 Question types:
 

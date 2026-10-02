@@ -1,6 +1,6 @@
-# Decision Index quality: pinned repaired sample100
+# Decision Index quality: pinned sample100
 
-**Outcome / revision:** Q1 / 2, 2026-10-02. One authorized official pipeline against the pinned repaired release completed **100/100 sampled requests, zero errors/refusals**. All 760 answers match historical v7 exactly in this execution. Native quality is mixed; valid response count is not correctness. This fresh run measures the repaired release; earlier saved outputs remain historical, not evidence for revised code.
+**Outcome / revision:** Q1 / 3, 2026-10-02. The pinned release completed **100/100 sampled requests, zero errors/refusals**, covering 760 questions. Native quality is mixed; valid response count is not correctness. Source, binary and evaluation inputs are pinned in the execution receipt.
 
 ## Evidence and limits
 
@@ -10,9 +10,11 @@ The suite verifier reported matching content, additions, exclusions and subsets.
 
 Fresh output: `/work/runs/http-repaired-sample100-20261002`. Official `decision_index=0.0`, `raw_index=0.11`, weighted index coverage `0.0031`, `complete=false`: only 100 requests answered/scored, 150,217 pending. Unweighted completion is 0.0665%, distinct from weighted index coverage 0.31%. Coverage-adjusted, chance-corrected index penalizes unanswered requests; **zero index is not zero sample accuracy**. Historical offline scores remain under `http-uds-v7-offline-20261002` and `http-uds-seq1-offline-20261002`.
 
-## Approved input amendment and execution
+## Execution
 
-Q-PQNLD-5 human choice **Preserve JSON** superseded the earlier string-only assumption before inference. Structured instructions/descriptions are retained; missing fields, object/type/cardinality and score-evidence safeguards remain. Recheck found zero invalid requests/fields in original 100 requests (746 choice, 14 noul questions). No coercion, filtering, tuning or training occurred. The prior 11-request finding remains historical discovery evidence, not current failure.
+Structured JSON instructions and descriptions are supported. All original 100
+requests passed input validation: 746 choice and 14 noul questions. No coercion,
+filtering, tuning or training occurred.
 
 [Execution receipt](quality-evidence/fresh-result-20261002.json) pins source archive `866f0c04…9d72`, release `ded05dca…d87a`, and task descriptor `2a9f6df5…4aa5`; full hashes are retained. Immutable archive and running executable hashes matched approved Apollo GREEN artifacts. Task-copy descriptor forced lettered/exact scoring; no echo fallback, model switch, engine/MTP change or restart. New sidecar cache began blank; shared engine cache/load was not reset or isolated.
 
@@ -32,10 +34,10 @@ defect nor proof that model capacity is the cause.
 
 Reliability checks establish refusal and response-contract behavior. They do not
 guarantee correct decisions, and normalized option probabilities are not calibrated
-correctness probabilities. The repaired run preserves historical v7 answers; no
-decision-accuracy gain is demonstrated. To investigate attribution, compare the
+correctness probabilities. No decision-accuracy gain is demonstrated. To
+investigate attribution, compare the
 same model and examples using ordinary generation and closed-set readout, keeping
-information and scoring comparable. That comparison has not been run or authorized.
+information and scoring comparable. That comparison has not been run.
 
 All 44 benchmarks are represented, usually by two requests. [Fresh native metrics](quality-evidence/fresh-native-metrics-20261002.json) preserve task names, scores and denominators; [historical metrics](quality-evidence/native-metrics-20261002.json) remain unchanged. Native metrics apply to complete supported sampled case groups; request count is not universally a field/group denominator.
 
@@ -53,13 +55,15 @@ All 44 benchmarks are represented, usually by two requests. [Fresh native metric
 
 High field accuracy can hide failed whole-case decisions and class imbalance; ACOS and appliance results illustrate this. ACOS's seven requests span only two stored groups with 402 requested questions; they are not seven independent reviews or 402 independent cases. Overall sample has 91 stored groups by catalog, not 760 independent observations. Requested-question counts are not universally gold-scored field denominators. Ranking nDCG, Brier, macro-F1 and exact accuracy cannot be pooled. Tiny denominators prohibit broad superiority claims. Native iSarcasm summary has no pooled scalar; none invented.
 
-## Historical reproducibility, not a controlled regression test
+## Comparison limits
 
-[Joined comparison](quality-evidence/reproducibility-20261002.json) finds unique matching `run_id` and payload hashes for all 100 requests. Seq1/seq2 have identical model and answer objects on 100/100 rows, all 760 question answers, and zero probability deltas. Comparing v7 with seq1 instead finds only 3 identical rows, 37 changed choices among 760 questions, and maximum absolute probability delta 0.975. Their identical rounded headline indices conceal native-metric differences: ForecastBench Brier 0.0848 versus 0.0371. Saved metadata does not pin binary/engine epochs; this is not a controlled binary A/B.
-
-Saved usage exposes input tokens only: no cache-hit/reset attestation. Equality does not prove independent inference or cache-free execution. Saved artifacts do not establish isolation from mixed chat traffic or engine restarts, so these comparisons cannot establish serving determinism.
-
-[Fresh/v7 join](quality-evidence/fresh-comparison-20261002.json): same 100 unique IDs/payload hashes/models/statuses; all 760 answers identical, zero choice/noul probability deltas and zero native-primary metric changes. This is observed parity, **not causal accuracy improvement** under uncontrolled engine epoch/cache/load. Model API identity remained unchanged; raw metadata hashes differ with volatile `created`/`permission` fields. No weight-content hash established.
+[The baseline join](quality-evidence/fresh-comparison-20261002.json) matches all
+100 IDs/payloads and 760 answers, with zero probability or native-primary metric
+changes. This is observed parity, not causal accuracy improvement or serving
+determinism: engine epoch, shared cache and chat load were uncontrolled. Model API
+identity remained unchanged, but no weight-content hash was established.
+[Earlier run comparisons](quality-evidence/reproducibility-20261002.json) remain
+available as evidence, not a repeatability guarantee.
 
 ## Commands, privacy and continuing work
 
@@ -67,4 +71,5 @@ Saved usage exposes input tokens only: no cache-hit/reset attestation. Equality 
 
 Raw records/logs remain Apollo-private: directories0700/files0600. Reports contain aggregate metrics/counts/hashes only, no rows, responses, labels, credentials or full environment. Kit MIT license does not license constituent corpora; no redistribution permission inferred or corpus copied locally.
 
-Q1 historical baseline and authorized fresh sample are complete. [Preparation trail](quality-evidence/fresh-preparation-20261002.json) preserves superseded assumptions. The user subsequently requested final review, documentation updates and local merges to `main`; this does not authorize another inference run, pushing or deployment. No general calibration/full-suite-quality claim is justified by this tiny sample.
+The sample is complete; the suite is not. No general calibration or full-suite
+quality claim is justified by these tiny per-task samples.

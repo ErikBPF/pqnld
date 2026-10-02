@@ -19,12 +19,13 @@ without breaking.
 |---|---|---|
 | `readout` | `"auto"` | `"auto"`, `"lettered"`, or `"echo"` (see below) |
 | `letters` | `"abcdefghijklmnopqrstuvwxyz"` | The single-token labels used for the lettered readout. Limit is 26 by default; a model with single-token labels in another alphabet can supply them here |
-| `temperature` | `1.0` | Softmax temperature applied to the letter scores |
+| `temperature` | `1.0` | Finite positive softmax temperature; applied to readout scores |
 | `enable_thinking` | `false` | Passed as `chat_template_kwargs.enable_thinking` on the lettered request |
 | `system_prompt` | a decision-engine prompt | System message for the echo fallback context |
 | `letter_system_prompt` | a decision-engine prompt | System message for the lettered request |
 | `chat_template` | Qwen3.8 ChatML with an empty thinking block | Used by the echo fallback to build the raw context. `{system}` and `{body}` are substituted. Set to `null` only if you will not use echo |
-| `engine_profile` | `"full"` | A hint for launchers: `"full"` (spec decoding + KV connector) or `"lean"`. pqnld itself does not read it; the reference `serve-litellm.sh` does |
+| `engine_profile` | `"full"` | Metadata only; pqnld does not configure the engine from this field |
+| `specific_token_scores` | `false` | Opt into explicit label-token ID scoring with a compatible adapter |
 
 ## Readout modes
 
@@ -33,8 +34,8 @@ without breaking.
   independent. Preferred; needs a model whose answer slot is a letter.
 - **`echo`** — echo the context and each `context + key`, summing the key-token
   log-probabilities. Used as the fallback when the lettered path does not fit the
-  model, and for engines without exact-token scoring (questions with more than 26
-  options use the extended single-token alphabet when exact IDs are available).
+   model or configured alphabet. Large questions use extended single-token labels
+   only with `specific_token_scores: true` and a compatible adapter.
 - **`auto`** — probe at startup:
   1. Send a fixture choice (`red`/`blue`/`green`, expected `b`).
   2. Keep `lettered` **only if** the highest-logprob token at the answer slot is
