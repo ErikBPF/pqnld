@@ -19,6 +19,10 @@ full probability distribution** over exactly the options you supplied — no fre
 text and no options outside the supplied set. Calibration must be evaluated on
 your own labeled data.
 
+The 255-option limit is the wire ceiling, not guaranteed serving capacity. Exact
+scoring also requires enough distinct single-token labels: 206 were measured on
+the reference tokenizer, from a default candidate alphabet of 208 characters.
+
 ```
 state: "The meeting is on Tuesday at 3pm in room B."
 question: which day?  {monday, tuesday, friday}
@@ -30,8 +34,9 @@ chat completions and decisions share one vLLM process and its continuous
 batching — no second model to host.
 
 **Serving status:** exact-token scoring is experimental. The tested vLLM MTP
-path drops requested scores during concurrent chat; the proposed engine fix is
-not yet GPU-validated. MTP remains required for the primary completions workload.
+path drops requested scores during concurrent chat; the proposed scorer passed a
+GPU component check, but patched-server mixed-load verification remains pending.
+MTP remains required for the primary completions workload.
 See [benchmark evidence and repair status](docs/mixed-readout-diagnosis.md).
 
 > The name is the point. **P**arallel **Q**uery **N**ode, **L**ogit **D**ecisions
@@ -46,7 +51,7 @@ See [benchmark evidence and repair status](docs/mixed-readout-diagnosis.md).
 
 - A readout. Returned option scores are normalized over your options; they are
   not automatically calibrated correctness probabilities.
-- A wrapper. No weights, no training, no fork of your engine.
+- A wrapper. No additional weights, no training, no fork of your engine.
 - One engine. Chat and decisions share vLLM's continuous batch, because a decision
   is just a tiny chat request.
 
@@ -58,9 +63,10 @@ See [benchmark evidence and repair status](docs/mixed-readout-diagnosis.md).
   decides — that is the whole trick, and the whole limit.
 - A `score` type, or free-form. `choice` (2–255) and `noul` only; anything else is
   refused, never approximated.
-- Magic calibration. It reports the model's belief faithfully. Whether that belief
-  is *right* is your data's problem, not the wrapper's.
-- A scheduler. Under load, your engine's admission ramp sets latency, not pqnld.
+- Magic calibration. Accuracy depends on model capacity, prompt formulation,
+  readout and backend; this benchmark does not isolate their contributions.
+- An engine-wide scheduler. It bounds its own scoring, not direct engine chat;
+  the engine's admission policy and shared load still affect latency.
 
 ---
 
@@ -69,10 +75,9 @@ See [benchmark evidence and repair status](docs/mixed-readout-diagnosis.md).
 - **Closed-set outputs by construction.** The model never emits free text; pqnld reads
   the next-token distribution over the options you provided and softmaxes it.
   An answer outside your option set is impossible; an incorrect choice is not.
-- **No new weights.** It is a wrapper over an endpoint you already run. If you
-  serve Qwen, Llama, Mistral, or anything else that exposes `logprobs`, you
-  already have the model for typed decisions; whether its decisions are accurate
-  is your calibration problem, not a new model's.
+- **No new weights.** It is a wrapper over a compatible endpoint you already
+  run. Logprobs alone do not establish adapter, tokenizer, or model compatibility;
+  correctness and calibration still need labeled evaluation.
 - **Explicit uncertainty.** The output is a distribution over allowed labels.
   Validate calibration before using it for routing, triage, or confidence thresholds.
 - **One engine, two workloads.** A decision is just a `max_tokens=1` +
@@ -90,7 +95,9 @@ Grab the static binary from the
 cargo build --release --manifest-path sidecar-rs/Cargo.toml
 ```
 
-Start it against a running vLLM (or any) OpenAI server:
+This quickstart targets historically tested vLLM. Other adapters require
+backend-specific compatibility verification; hosted OpenAI is not currently a
+verified drop-in target.
 
 ```sh
 ./sidecar-rs/target/release/pqnld-rs --vllm-url http://127.0.0.1:8000 \
@@ -134,30 +141,52 @@ drives it against a stub engine.
 
 1. pqnld renders each question with **single-letter option labels**
    (`a) Tuesday`, `b) Friday`, …).
-2. It sends **one chat request** (`max_tokens=1`, `logprobs`, `top_logprobs ≥
-   option count`) and reads the distribution over those letters at the answer
-   slot.
+2. It requests one answer token (`max_tokens=1`, `logprobs`) and reads the
+   distribution over those labels at the answer slot. Exact-ID scoring may use
+   multiple upstream requests for one question.
 3. It maps single-letter tokens back to option keys, ignores words and other
    non-letter tokens, requires every label to be present, and softmaxes with a
    per-model temperature. Missing label scores are refused with HTTP 422.
 
 Because a label is a single token, options are independent and multi-token
-option keys cost nothing extra. Questions with **more than 26 options** use an
-extended, tokenizer-verified single-token alphabet; when the engine's
-per-request explicit-token cap (128) is exceeded the shared prompt is split
-across `ceil(n/128)` requests and the answer-slot scores are merged losslessly.
-The older chunked **echo** readout remains only for models without
-explicit-token scoring.
+option keys do not require scoring their full text on the lettered path. With
+`specific_token_scores: true` in the descriptor and a compatible adapter,
+questions with **more than 26 options** use an extended, tokenizer-verified
+single-token alphabet. Above the explicit-ID cap (128), the same rendered prompt
+is sent in `ceil(n/128)` requests and absolute answer-slot logprobs are merged.
+Historical overlap checks matched exactly; this requires comparable full-vocabulary
+scores from every request, not per-chunk normalized scores. Exact-ID scoring is
+opt-in; the shipped descriptor does not enable it. Without it, large questions
+may still use the older chunked **echo** path.
+
+The historical vLLM echo workload OOM-crashed the engine on long prompts. Validate
+backend capacity before using that fallback for large questions; do not treat the
+255-option wire ceiling as a production-serving guarantee.
 
 At startup pqnld **probes the model**: with `readout: auto` it keeps the lettered
 path only when a single option letter really is the top token for a fixture, and
 otherwise forces the echo readout. A descriptor that asks for echo without a
 chat template is refused.
 
-Questions in one request are read **sequentially by default** so repeated runs
-are reproducible; a worker bound allows opt-in concurrency, and identical
+Questions in one request are read **sequentially by default**. This produced
+identical outputs in two isolated historical sample runs, not a universal
+reproducibility guarantee: direct engine chat and engine restarts can change
+scores. `--workers N` now bounds sidecar scoring globally across clients, including
+readout probes; at one worker each request retains stored question order. This
+does not govern chat sent directly to the engine. Failed concurrent decisions
+cancel and drain their remaining local tasks, but cannot unsend upstream requests.
+Raising the worker bound allows opt-in question concurrency, and identical
 repeated decisions are served from a bounded LRU cache keyed by model +
 descriptor + readout + request.
+
+### Reliability versus decision quality
+
+Valid typed answers and genuine score evidence do not guarantee correct decisions.
+Task accuracy depends on the model, prompt, readout and backend together; poor
+accuracy alone does not identify a tool defect or establish a model-capacity limit.
+The repaired 100-request sample completed without errors and matched historical
+answers, with mixed native task quality. See [the evaluation](docs/decision-index-quality.md)
+for task metrics, tiny-sample limits and unproven calibration.
 
 ### The binary
 

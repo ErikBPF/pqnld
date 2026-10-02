@@ -33,12 +33,12 @@ fn tool() -> Value {
                                 "required": ["type", "instructions", "criteria"],
                                 "properties": {
                                     "type": {"const": "choice"},
-                                    "instructions": {"type": "string"},
+                                    "instructions": {},
                                     "criteria": {
                                         "type": "object",
                                         "minProperties": 2,
                                         "maxProperties": 255,
-                                        "additionalProperties": {"type": ["string", "null"]}
+                                        "additionalProperties": true
                                     }
                                 }
                             },
@@ -47,7 +47,7 @@ fn tool() -> Value {
                                 "required": ["type", "instructions"],
                                 "properties": {
                                     "type": {"const": "noul"},
-                                    "instructions": {"type": "string"}
+                                    "instructions": {}
                                 }
                             }
                         ]
@@ -163,5 +163,88 @@ pub async fn serve(ctx: Arc<Ctx>) {
         if let Some(response) = handle(&ctx, &message).await {
             write_value(&response);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests_readout::{make_ctx, malformed_questions, structured_question_values, MockEngine};
+    use crate::ModelSpec;
+
+    #[tokio::test]
+    async fn malformed_decide_tool_questions_refuse_without_engine_access() {
+        let (ctx, engine) = make_ctx(MockEngine::exact(&[]), ModelSpec::default());
+        for question in malformed_questions() {
+            let message = json!({"params": {"name": "decide", "arguments": {
+                "state": null, "questions": {"q": question}
+            }}});
+            let response = call_tool(&ctx, &json!(1), &message).await;
+            assert_eq!(response["result"]["isError"], true, "{response}");
+            let error: Value = serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+            assert_eq!(error["error"]["status"], 422);
+            assert_eq!(engine.request_count(), 0);
+        }
+        let message = json!({"params": {"name": "decide", "arguments": {
+            "state": null, "questions": {}
+        }}});
+        let response = call_tool(&ctx, &json!(1), &message).await;
+        assert_eq!(response["error"]["code"], -32602);
+        assert_eq!(engine.request_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn valid_decide_tool_retains_structured_response() {
+        let spec = ModelSpec { readout: "lettered".to_string(), specific_token_scores: true, ..Default::default() };
+        let (ctx, _) = make_ctx(MockEngine::exact(&[(97, -0.5), (98, -1.0)]), spec);
+        let questions = json!({
+            "choice": {"type": "choice", "instructions": "", "criteria": {"a": null, "b": "B"}},
+            "binary": {"type": "noul", "instructions": ""}
+        });
+        let message = json!({"params": {"name": "decide", "arguments": {"state": [1, true, null, {"nested": "context"}], "questions": questions}}});
+        let response = call_tool(&ctx, &json!(1), &message).await;
+        assert_eq!(response["result"]["isError"], false);
+        crate::validate(questions.as_object().unwrap(), &response["result"]["structuredContent"]).unwrap();
+    }
+
+    #[tokio::test]
+    async fn decide_tool_accepts_present_json_instructions_and_descriptions() {
+        for (value, _) in structured_question_values() {
+            let spec = ModelSpec { readout: "lettered".to_string(), specific_token_scores: true, ..Default::default() };
+            let (ctx, _) = make_ctx(MockEngine::exact(&[(97, -0.5), (98, -1.0)]), spec);
+            let questions = json!({
+                "choice": {"type": "choice", "instructions": value, "criteria": {"left": value, "right": null}},
+                "binary": {"type": "noul", "instructions": value}
+            });
+            let message = json!({"params": {"name": "decide", "arguments": {"state": null, "questions": questions}}});
+            let response = call_tool(&ctx, &json!(1), &message).await;
+            assert_eq!(response["result"]["isError"], false, "present JSON value {value} refused: {response}");
+            crate::validate(questions.as_object().unwrap(), &response["result"]["structuredContent"]).unwrap();
+        }
+    }
+
+    #[test]
+    fn decide_schema_allows_json_values_but_preserves_required_shape() {
+        let tool = tool();
+        let questions = &tool["inputSchema"]["properties"]["questions"];
+        assert_eq!(questions["type"], "object");
+        assert_eq!(questions["minProperties"], 1);
+        let schemas = questions["additionalProperties"]["oneOf"].as_array().unwrap();
+        for schema in schemas {
+            assert_eq!(schema["type"], "object");
+            assert_eq!(schema["properties"]["instructions"], json!({}), "empty schema accepts every JSON value");
+            let required = schema["required"].as_array().unwrap();
+            assert!(required.contains(&json!("type")));
+            assert!(required.contains(&json!("instructions")));
+        }
+        let choice = &schemas[0];
+        assert_eq!(choice["properties"]["type"]["const"], "choice");
+        assert_eq!(schemas[1]["properties"]["type"]["const"], "noul");
+        assert!(choice["required"].as_array().unwrap().contains(&json!("criteria")));
+        let criteria = &choice["properties"]["criteria"];
+        assert_eq!(criteria["type"], "object");
+        assert_eq!(criteria["minProperties"], 2);
+        assert_eq!(criteria["maxProperties"], 255);
+        assert_eq!(criteria["additionalProperties"], true, "description schema accepts every JSON value");
     }
 }

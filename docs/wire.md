@@ -30,6 +30,17 @@ Request:
 - `model` is echoed back in the response; it does not select anything server-side.
 - `state` may be a string or any JSON value (`{}` and `[]` render as `(empty)`).
 - `questions` is required and non-empty.
+- Every question is an object with required `instructions` and a supported
+  `type`. Instructions and criterion descriptions may be any JSON value; the
+  existing renderer preserves strings directly and serializes structured values.
+  Choice `criteria` is an object with 2–255 keys. A `null` description prints its
+  key. The wire ceiling does not guarantee enough tokenizer labels.
+
+The reliability repair refuses missing instructions and malformed criteria with
+422 before probing/scoring. The initial string-only proposal was superseded by
+Q-PQNLD-5: structured values used by the official corpus remain supported, and MCP
+schema is aligned with that existing HTTP renderer. Structured JSON `state` and
+valid answer envelopes remain supported.
 
 Question types:
 
@@ -67,9 +78,9 @@ Invariants (checked by the server before it replies, and rejected if broken):
 | Status | When |
 |---|---|
 | `400` | Malformed JSON body, or a missing `questions` field |
-| `422` | Unsupported question type, incomplete answer-slot label scores, or options that do not fit the model's context (`Unsupported`). The model's capacity message is preserved in `error` |
+| `422` | Empty questions, non-object question, missing instructions, missing/non-object criteria, choice cardinality outside 2–255, unsupported type, incomplete answer-slot labels, or model capacity refusal (`Unsupported`). The message is preserved in `error` |
 | `404` | Unknown path |
-| `500` | The engine errored, or the readout self-check failed |
+| `500` | Engine error, malformed/incomplete/misaligned echo evidence, non-finite scores, or failed readout self-check |
 
 A rejected question is **never** guessed or truncated: capacity overflow is a
 `422`, not a partial answer.

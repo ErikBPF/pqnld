@@ -137,10 +137,11 @@ Feature: Decision readout sidecar over a served Apollo model
     Then the answer is served without a second upstream request
     And the least recently used entry is evicted beyond the cache bound
 
-  @DR-14 @S2
-  Scenario: Concurrent decisions are not serialized by the sidecar
+  @DR-14 @unautomated @S2
+  Scenario: A larger global worker budget permits concurrent decisions
     Given an upstream that records the number of requests in flight
-    When several decisions are requested at once
+    And the sidecar global worker budget is greater than one
+    When several uncached decisions are requested at once
     Then every response is a valid distribution
     And the upstream observed more than one request in flight
 

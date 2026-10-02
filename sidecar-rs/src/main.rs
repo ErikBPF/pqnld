@@ -540,14 +540,33 @@ async fn echo_scores(ctx: &Ctx, context: &str, keys: &[String]) -> Result<(Vec<f
         ));
     }
     let context_pairs = ctx.engine.prompt_logprobs(context).await?;
+    let usable = |pairs: &engine::PromptLogprobs| {
+        !pairs.is_empty() && pairs.iter().enumerate().all(|(index, (_, score))| {
+            match score {
+                Some(score) => score.is_finite(),
+                None => index == 0,
+            }
+        })
+    };
+    if !usable(&context_pairs) {
+        return Err(EngineError::Other("echo response has unusable context scores".to_string()));
+    }
     let ctx_tokens: Vec<String> = context_pairs.into_iter().map(|(token, _)| token).collect();
     let mut scores = Vec::new();
     let mut usage_tokens = 0i64;
     for chunk in keys.chunks(ctx.batch) {
         let prompts: Vec<String> = chunk.iter().map(|k| format!("{context}{k}")).collect();
         let batch = ctx.engine.prompt_logprobs_batch(&prompts).await?;
+        if batch.len() != chunk.len() {
+            return Err(EngineError::Other(format!(
+                "echo response has {} scores, expected {}", batch.len(), chunk.len()
+            )));
+        }
         usage_tokens = ctx.engine.last_usage();
         for pairs in batch {
+            if !usable(&pairs) {
+                return Err(EngineError::Other("echo response has unusable token scores".to_string()));
+            }
             let tokens: Vec<String> = pairs.iter().map(|(token, _)| token.clone()).collect();
             let mut shared = 0;
             while shared < ctx_tokens.len()
@@ -557,7 +576,16 @@ async fn echo_scores(ctx: &Ctx, context: &str, keys: &[String]) -> Result<(Vec<f
                 shared += 1;
             }
             let start = shared.min(pairs.len());
-            scores.push(pairs[start..].iter().map(|(_, logprob)| logprob).sum());
+            if start == pairs.len() {
+                return Err(EngineError::Other("echo response has no continuation scores".to_string()));
+            }
+            let score: f64 = pairs[start..].iter().map(|(_, score)| {
+                score.ok_or_else(|| EngineError::Other("echo continuation has an unscored token".to_string()))
+            }).sum::<Result<_, _>>()?;
+            if !score.is_finite() {
+                return Err(EngineError::Other("echo continuation score is non-finite".to_string()));
+            }
+            scores.push(score);
         }
     }
     Ok((scores, usage_tokens))
@@ -586,6 +614,8 @@ fn require_template(ctx: &Ctx) -> Result<(), EngineError> {
 }
 
 async fn probe(ctx: &Ctx) -> Result<Mode, EngineError> {
+    let _permit = ctx.sem.acquire().await
+        .map_err(|e| EngineError::Other(format!("worker admission failed: {e}")))?;
     let probe_question = json!({
         "type": "choice",
         "instructions": "Which colour is named?",
@@ -614,7 +644,8 @@ async fn probe(ctx: &Ctx) -> Result<Mode, EngineError> {
 }
 
 async fn ensure_mode(ctx: &Ctx) -> Result<Mode, EngineError> {
-    if let Some(mode) = *ctx.mode.lock().await {
+    let mut current = ctx.mode.lock().await;
+    if let Some(mode) = *current {
         return Ok(mode);
     }
     let mode = match ctx.spec.readout.as_str() {
@@ -626,8 +657,35 @@ async fn ensure_mode(ctx: &Ctx) -> Result<Mode, EngineError> {
         "auto" => probe(ctx).await?,
         other => return Err(EngineError::Unsupported(format!("unknown readout {other:?}"))),
     };
-    *ctx.mode.lock().await = Some(mode);
+    *current = Some(mode);
     Ok(mode)
+}
+
+fn validate_question_input(key: &str, question: &Value) -> Result<(), EngineError> {
+    if !question.is_object() || question.get("instructions").is_none() {
+        return Err(EngineError::Unsupported(format!(
+            "{key}: question requires instructions"
+        )));
+    }
+    match question.get("type").and_then(Value::as_str) {
+        Some("choice") => {
+            let criteria = question.get("criteria").and_then(Value::as_object).ok_or_else(|| {
+                EngineError::Unsupported(format!("{key}: choice requires a criteria object"))
+            })?;
+            if !(2..=255).contains(&criteria.len()) {
+                return Err(EngineError::Unsupported(format!(
+                    "{key}: a choice takes 2 to 255 options"
+                )));
+            }
+        }
+        Some("noul") => {}
+        other => {
+            return Err(EngineError::Unsupported(format!(
+                "{key}: unsupported question type {other:?}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 async fn score_question(
@@ -636,7 +694,10 @@ async fn score_question(
     key: String,
     question: Value,
 ) -> Result<(String, Value, i64), EngineError> {
+    validate_question_input(&key, &question)?;
     let mode = ensure_mode(&ctx).await?;
+    let _permit = ctx.sem.acquire().await
+        .map_err(|e| EngineError::Other(format!("worker admission failed: {e}")))?;
     let qtype = question
         .get("type")
         .and_then(|t| t.as_str())
@@ -770,6 +831,12 @@ async fn readout_call(
     state: &Value,
     questions: &Map<String, Value>,
 ) -> Result<Value, EngineError> {
+    if questions.is_empty() {
+        return Err(EngineError::Unsupported("questions must be non-empty".to_string()));
+    }
+    for (key, question) in questions {
+        validate_question_input(key, question)?;
+    }
     let mode = ensure_mode(&ctx).await?;
     let key = cache_key(&ctx, mode, state, questions);
     if let Some(hit) = ctx.cache.lock().unwrap().get(&key) {
@@ -789,26 +856,33 @@ async fn readout_call(
             input_tokens += tokens;
         }
     } else {
-        let mut handles = Vec::new();
+        let mut handles = tokio::task::JoinSet::new();
         for (question_key, question) in items {
             let ctx = ctx.clone();
             let state = state.clone();
-            handles.push(tokio::spawn(async move {
-                let _permit = ctx.sem.acquire().await;
+            handles.spawn(async move {
                 score_question(ctx.clone(), state, question_key, question).await
-            }));
+            });
         }
-        for handle in handles {
-            match handle.await {
+        while let Some(result) = handles.join_next().await {
+            let error = match result {
                 Ok(Ok((question_key, answer, tokens))) => {
                     answers.insert(question_key, answer);
                     input_tokens += tokens;
+                    continue;
                 }
-                Ok(Err(error)) => return Err(error),
-                Err(e) => return Err(EngineError::Other(format!("readout task failed: {e}"))),
-            }
+                Ok(Err(error)) => error,
+                Err(e) => EngineError::Other(format!("readout task failed: {e}")),
+            };
+            handles.abort_all();
+            while handles.join_next().await.is_some() {}
+            return Err(error);
         }
     }
+    // Preserve stored answer order even when concurrent questions finish out of order.
+    let answers: Map<String, Value> = questions.keys().filter_map(|key| {
+        answers.remove(key).map(|answer| (key.clone(), answer))
+    }).collect();
     let response = json!({
         "model": ctx.model,
         "answers": answers,
@@ -1080,8 +1154,8 @@ async fn main() {
         })
         .or(Some(spec.temperature))
         .unwrap_or(1.0);
-    if temperature <= 0.0 {
-        panic!("temperature must be > 0");
+    if !temperature.is_finite() || temperature <= 0.0 {
+        panic!("temperature must be finite and > 0");
     }
 
     let client = reqwest::Client::builder()

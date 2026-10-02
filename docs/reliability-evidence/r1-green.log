@@ -1,0 +1,32 @@
+cargo test --manifest-path sidecar-rs/Cargo.toml
+   Compiling pqnld-rs v0.3.0 (/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.76s
+     Running unittests src/main.rs (sidecar-rs/target/debug/deps/pqnld_rs-e43595ed4165f434)
+
+running 23 tests
+test engine::tests::openai_top_logprobs_response ... ok
+test engine::tests::vllm_exact_id_response ... ok
+test engine::tests::llamacpp_n_probs_request_shape ... ok
+test engine::tests::vllm_exact_id_request_shape ... ok
+test engine::tests::echo_logprobs_response ... ok
+test engine::tests::llamacpp_n_probs_response ... ok
+test engine::tests::vllm_generic_topk_response ... ok
+test tests::text_serializes_json_like_python ... ok
+test tests_readout::generic_topk_ignores_non_letter_words ... ok
+test tests_readout::unsupported_question_type_is_refused ... ok
+test engine::tests::sglang_native_response ... ok
+test tests_readout::noul_reports_true_probability ... ok
+test tests_readout::validate_rejects_bad_distributions ... ok
+test tests_readout::extended_labels_are_unique_and_large ... ok
+test tests_readout::echo_refuses_prefix_overlapping_keys ... ok
+test tests_readout::specific_scores_produce_a_distribution ... ok
+test tests_readout::letter_of_accepts_only_single_letters ... ok
+test tests::py_float_matches_python_repr ... ok
+test tests_readout::render_lettered_shape_and_empty_state ... ok
+test tests_readout::specific_scores_refuse_missing_labels ... ok
+test tests_readout::cache_preserves_criteria_order ... ok
+test tests_readout::malformed_questions_refuse_before_any_engine_request ... ok
+test tests_readout::over_128_options_split_and_merge_losslessly ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

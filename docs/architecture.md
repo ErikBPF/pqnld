@@ -33,10 +33,11 @@ per question — and on a hybrid model whose unified block size exceeds the
 decision prompt, nothing is prefix-cached, so every option re-prefills. The
 lettered readout replaced it with one request.
 
-More than 26 options no longer needs echo: they are relabelled with an extended,
-tokenizer-verified single-token alphabet and scored by explicit token ID, split
-across `ceil(n/128)` requests. The echo path now survives only for engines
-without exact-token scoring.
+With `specific_token_scores: true` and a compatible adapter, more than 26 options
+can use an extended, tokenizer-verified single-token alphabet and explicit token
+IDs, split above the tested 128-ID cap across `ceil(n/128)` requests. The shipped
+descriptor does not enable this route. Without exact scoring, questions exceeding
+the configured label alphabet fall back to echo; backend capacity still applies.
 
 ## The lettered readout
 
@@ -82,8 +83,9 @@ expected answer `b`):
 - otherwise switch to `echo` and require a `chat_template`;
 - a descriptor that asks for `echo` with no `chat_template` is refused up front.
 
-Incomplete label coverage during the probe is refused rather than silently
-selecting a readout mode.
+With `specific_token_scores: true`, unsupported or incomplete probe label coverage
+is refused. With generic top-k scoring, that probe failure selects echo instead,
+which still requires a chat template and usable score evidence.
 
 The probe is best-effort: a transport error during the probe falls back to echo
 rather than refusing to start. Point the server at a healthy engine (the
@@ -92,11 +94,13 @@ reference launcher health-checks the engine before starting pqnld).
 ## Concurrency
 
 - The HTTP server handles requests concurrently.
-- Questions inside one decision are read **sequentially by default**
-  (`--workers 1`), in submission order. The engine's batched decode
-  is not numerically identical to single-stream decode, and MTP adds variation
-  across concurrent requests, so sequential execution is what makes repeated
-  decisions reproducible. A worker bound opts back into concurrency.
+- Question scoring and initial readout probes share a **global sidecar worker
+  budget** (`--workers 1` by default). At one worker, each request keeps its stored
+  question order; a larger budget permits concurrent question scoring across
+  requests. Failed concurrent decisions cancel and drain remaining local tasks.
+- This budget does not govern ordinary chat sent directly to the engine or unsend
+  upstream requests already accepted. Engine batch numerics, MTP, restarts and
+  cache state prevent a universal repeatability guarantee.
 - The LRU cache is guarded by a lock.
 
 Sequential also matches the engine's admission ramp: tiny one-token requests are

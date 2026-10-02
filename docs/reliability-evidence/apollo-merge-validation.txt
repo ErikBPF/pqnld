@@ -1,0 +1,29 @@
+Expected source archive SHA256: 866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72
+Normalized source archive SHA256: 866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72
+Pre-test source pin verification: PASS
+Debug command: bash docs/reliability-evidence/apollo-test.sh (owner make test on Apollo)
+Release command: ssh apollo W/pm.sh exec -w /work/pqnld-reliability-20261002 dibuild env CARGO_HOME=/work/cargo RUSTUP_HOME=/work/rustup PATH=/work/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin CARGO_TARGET_DIR=/work/pqnld-reliability-20261002/target CARGO_NET_OFFLINE=true CARGO_TERM_COLOR=never CARGO_BUILD_JOBS=2 RUSTC_WRAPPER= cargo test --release --manifest-path sidecar-rs/Cargo.toml
+Workspace marker: verified
+Validation started UTC: 2026-10-02T16:35:27.713988+00:00
+Preserved archive / remote source comparison before tests: PASS
+Read-only toolchain query: rustup show active-toolchain
+stable-x86_64-unknown-linux-gnu (default)
+Read-only toolchain query: rustc --version
+rustc 1.99.0 (b940084d7 2026-09-28)
+Read-only toolchain query: cargo --version
+cargo 1.99.0 (5f94df478 2026-08-27)
+Formatter: BLOCKED: component not installed; no installation attempted
+Clippy: BLOCKED: component not installed; no installation attempted
+Apollo make test: exit 0; 46 unit + 1 integration = 47 passed; no failures/ignored/filtered tests
+APOLLO_MERGE_DEBUG_OK
+Apollo CI cargo test --release: exit 0; 46 unit + 1 integration = 47 passed; no failures/ignored/filtered tests
+APOLLO_MERGE_RELEASE_OK
+Post-test source / preserved archive comparison: PASS
+debug binary SHA256: cbcfe14cb4489acb8ae56a5a1f4a027f375bd649197b42e9bff35fb2e13dad56
+debug binary path: /work/pqnld-reliability-20261002/target/debug/pqnld-rs
+debug preserved artifact comparison: PASS
+release binary SHA256: ded05dca02e73849c8f9a88da981e717bb20211086796c2477e53d12caa6d87a
+release binary path: /work/pqnld-reliability-20261002/target/release/pqnld-rs
+release preserved artifact comparison: PASS
+Validation finished UTC: 2026-10-02T16:39:06.457300+00:00
+No source edits, dependency/component installations, benchmark/model calls, commits, pushes or deployment performed.

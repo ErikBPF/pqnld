@@ -1,7 +1,7 @@
 # Decision Index validation: PQNLD + Qwen on the official suite
 
 **Stage / revision:** RV / 4
-**Status:** pipeline runs end to end; the >26-option echo path is replaced by split exact-ID scoring; the Rust sidecar is the canonical drop-in and matches Python to one ULP on the full sample; no meaningful index yet (sample too small); decisions are sequential by default
+**Status:** historical sample pipeline and official offline rescoring complete; Apollo artifacts and provenance verified. Fresh repaired-release sample also completed 100/100; current native metrics and limitations are in [the quality report](decision-index-quality.md).
 **Owner / date:** PQNLD / 2026-10-01 UTC
 
 Goal: run PQNLD's readout against the Decision Index to see where it stands.
@@ -18,15 +18,27 @@ official kit <https://github.com/apolinario/decision-index>, used here directly.
 | sample-le26 (all questions <= 26 options) | restored original `0.90` | 89 | Completed: **89 ok** |
 | full sample-100 | split-merge exact-ID (original `0.90`) | 100 | Completed: **100 ok**; engine healthy after |
 | full sample-100 | split-merge + Rust/UDS sidecar (`0.90`) | 100 | Completed: **100 ok**, ~162 s concurrent |
-| full sample-100 | full-parity Rust (`0.90`) | 100 | **100 ok**; Python vs Rust: zero choice changes, max probability diff 5.6e-16 (1 ULP) |
+| full sample-100 | full-parity Rust (`0.90`) | 100 | **100 ok**; Python vs Rust: zero choice changes, max absolute probability diff 5.6e-16; ULP distance not established |
 
-The split-merge readout removes both failure modes: no question is refused for
-overlapping keys and the echo path is never used for choice questions, so the
-engine no longer OOMs even at the original `--gpu-memory-utilization 0.90`.
+In the exact-ID sample run, split-merge removed both failure modes: no question
+was refused for overlapping keys and no choice question used echo, avoiding the
+observed OOM at the original `--gpu-memory-utilization 0.90`. This requires the
+opt-in exact-ID descriptor; it does not describe the shipped descriptor's fallback.
 
-`index.json` `decision_index` is **null** with coverage ~0.0028
-(100 / 35714 rows). A 100-row sample is too small for a non-null index; a large
-share of the suite must be scored before any headline number exists.
+Apollo artifact verification on 2026-10-02 found suite edition `release-v2.1`,
+official scorer `0.2.1` at `87d4650b42b377c0291a89c1f1a879f9b31082bf`, and
+matching uncompressed corpus hashes. The actual manifest lists 119,898 scoreable
+base requests plus 30,419 added requests: **150,317**, not the previously reported
+35,714. The verified sample contains 100 rows; this count alone is not the
+official weighted coverage metric.
+
+Saved `http-uds-v7`, `http-uds-seq1`, and `http-uds-seq2` summaries report
+`complete: false`, **decision_index 0.0**, raw_index 0.11, and weighted coverage
+0.0031. The prior null-index claim was incorrect. A coverage-adjusted aggregate
+of 0.0 is not sample accuracy. Official offline rescoring is complete; these
+saved outputs measure historical binaries. The separately authorized fresh repaired
+run matched all 760 historical v7 answers; it demonstrates observed parity, not
+an accuracy improvement or full-suite quality.
 
 The 9 errors are PQNLD's own refusals for echo (prefix-overlapping) keys, which
 the kit records as errors because the message does not match its capacity markers.
@@ -38,9 +50,10 @@ The echo fallback posts `/v1/completions` with `echo=true`, so
 vLLM computes **prompt logprobs for every prompt token**. Long state x many
 options allocates large per-token logits and OOMs EngineCore in
 `compute_prompt_logprobs` -> `logits_processor._gather_logits` ->
-`tensor_model_parallel_all_gather`. The exact-ID lettered path is one
-`/v1/chat/completions` with `max_tokens=1` and never computes prompt logprobs, so
-it is safe. This is an engine-capacity failure on the echo path, not PQNLD logic.
+`tensor_model_parallel_all_gather`. The exact-ID lettered path requests
+`/v1/chat/completions` with `max_tokens=1` and does not request prompt logprobs;
+large label sets require multiple requests. This avoids the observed prompt-logprob
+allocation failure, not every possible engine failure.
 
 Levers found:
 
@@ -62,8 +75,10 @@ symbols (`a-z` first; then ASCII letters/digits/punctuation plus Greek and
 Cyrillic, 206 distinct measured) and scored by the answer-slot exact-ID readout.
 Because the engine caps `logprob_token_ids` at 128 (hardcoded
 `MAX_LOGPROB_TOKEN_IDS`), one rendered prompt is split across `ceil(n/128)`
-requests and the returned logprobs are merged; the merge is lossless (overlapping
-IDs matched exactly in live checks). The suite's maximum is 151 options.
+requests and the returned absolute logprobs are merged. Overlapping IDs matched
+exactly in historical live checks; correct merging requires identical conditioning
+and comparable full-vocabulary scores across requests. The suite's maximum is 151
+options; the 255-option wire ceiling exceeds the default 208 candidate labels.
 
 `sidecar-rs/` is the implementation (Rust-only): a full-parity drop-in (lettered
 and echo readouts, `auto` probe, LRU cache, chat shim, descriptors, env/flags,
@@ -95,9 +110,10 @@ run sequentially.
 
 Before the Python implementation was removed, the multi-engine refactor
 (`sidecar-rs/src/engine.rs`) exposed two real Rust defects; once fixed, Python
-and Rust agreed to **one ULP** on the full 100-row sample with **zero choice
-changes** (global max probability diff `5.6e-16`; 27 rows differ only in the last
-float bit, which `agree.py`'s exact-string comparison counts as different).
+and Rust had **zero choice changes** on the full 100-row sample with global max
+absolute probability difference `5.6e-16`. The historical comparison counted 27
+rows as different by exact string comparison; an absolute difference does not
+establish a one-ULP bound, and no ULP-distance receipt is available here.
 
 1. **Float rendering in the prompt.** Python's `repr`/`json.dumps` writes small
    floats in scientific notation (`7.249627201966407e-05`) while Rust
@@ -111,7 +127,7 @@ float bit, which `agree.py`'s exact-string comparison counts as different).
    uses stored order. Fixed by running questions in stored order when
    `workers == 1`.
 
-`cargo test --release` covers the adapters and the float formatter (10 tests).
+`make test` covers the adapters, readout, and float formatter without a model.
 
 The apparent refactor regression first reported (only 5/100 matching the stored
 baseline) was engine-state drift: the engine restarted at `2026-10-02T00:08:46Z`
@@ -155,11 +171,15 @@ left untouched; no temp engine is required.
 
 ## Limits and next gates
 
-- No calibration or quality claim: synthetic smoke and the 100-row sample only.
+- The fresh repaired-release sample measures native quality on the same tiny
+  subset; it does not establish calibration or broad model superiority. Historical
+  saved outputs remain distinct evidence.
 - The `0.80` diagnostic workaround is no longer needed; the original container
   runs the full sample at `0.90`.
-- Decisions are sequential by default so results are reproducible. Concurrency
-  (`--workers`) trades reproducibility for speed.
+- Questions within a request are sequential by default; two isolated historical
+  sample runs were identical. The repaired sidecar now enforces a global worker
+  budget across its clients and probes, not ordinary chat sent directly to the
+  engine. Concurrency (`--workers`) adds within-request parallelism.
   Sequential execution is still not guaranteed reproducible under simultaneous
   real chat load.
 - To obtain a real `decision_index`, run a large share of the suite against a

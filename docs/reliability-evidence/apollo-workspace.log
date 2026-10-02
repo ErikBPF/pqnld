@@ -1,0 +1,5 @@
+workspace: /work/pqnld-reliability-20261002
+mode: 0o700
+marker: pqnld-reliability-20261002-7342
+rustc 1.99.0 (b940084d7 2026-09-28)
+cargo 1.99.0 (5f94df478 2026-08-27)

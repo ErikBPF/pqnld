@@ -1,0 +1,57 @@
+snapshot sha256: 362649720f7d2de7074bf0cceb48517a0bbdb8814d89de0bec2ed5b633a1924c
+cargo test --manifest-path sidecar-rs/Cargo.toml
+   Compiling pqnld-rs v0.3.0 (/work/pqnld-reliability-20261002/sidecar-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.80s
+     Running unittests src/main.rs (target/debug/deps/pqnld_rs-33f8f17826ec3407)
+
+running 40 tests
+test engine::tests::llamacpp_n_probs_response ... ok
+test engine::tests::echo_logprobs_response ... ok
+test engine::tests::llamacpp_n_probs_request_shape ... ok
+test engine::tests::openai_top_logprobs_response ... ok
+test engine::tests::sglang_native_response ... ok
+test engine::tests::vllm_exact_id_response ... ok
+test engine::tests::vllm_exact_id_request_shape ... ok
+test tests::py_float_matches_python_repr ... ok
+test engine::tests::vllm_generic_topk_response ... ok
+test tests::text_serializes_json_like_python ... ok
+test tests_readout::echo_refuses_empty_or_unextended_evidence ... ok
+test tests_readout::echo_refuses_prefix_overlapping_keys ... ok
+test tests_readout::extended_labels_are_unique_and_large ... ok
+test tests_readout::echo_refuses_nonfinite_scores_and_sum_overflow ... ok
+test tests_readout::echo_refuses_wrong_batch_cardinality ... ok
+test tests_readout::echo_preserves_null_prefix_and_boundary_retokenization ... ok
+test tests_readout::letter_of_accepts_only_single_letters ... ok
+test tests_readout::generic_topk_ignores_non_letter_words ... ok
+test tests_readout::cache_preserves_criteria_order ... ok
+test tests_readout::render_lettered_shape_and_empty_state ... ok
+test tests_readout::noul_reports_true_probability ... ok
+test tests_readout::input_validator_accepts_255_choices_without_promising_tokenizer_capacity ... ok
+test tests_readout::unsupported_question_type_is_refused ... ok
+test tests_readout::specific_scores_produce_a_distribution ... ok
+test tests_readout::specific_scores_refuse_missing_labels ... ok
+test tests_readout::validate_rejects_bad_distributions ... ok
+test tests_readout::unusable_echo_evidence_returns_http_error_not_probabilities ... ok
+test tests_readout::workers_one_shares_budget_between_probe_and_question_scoring ... ok
+test tests_readout::workers_one_preserves_stored_question_and_answer_order ... ok
+test tests_readout::malformed_questions_refuse_before_any_engine_request ... ok
+test mcp::tests::malformed_decide_tool_questions_refuse_without_engine_access ... ok
+test tests_readout::valid_http_and_chat_retain_typed_envelopes ... ok
+test tests_readout::workers_one_bounds_independent_clients_and_initial_probes ... ok
+test tests_readout::over_128_options_split_and_merge_losslessly ... ok
+test engine::tests::echo_adapters_preserve_initial_unscored_token_alignment ... ok
+test tests_readout::failed_concurrent_readout_cancels_and_drains_remaining_scoring ... ok
+test engine::tests::vllm_echo_refuses_wrong_response_cardinality ... ok
+test tests_readout::http_and_chat_share_input_refusal_without_engine_access ... ok
+test engine::tests::vllm_echo_refuses_misaligned_choice_indices ... ok
+test engine::tests::echo_adapters_refuse_malformed_or_misaligned_scores ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 1 test
+     Running tests/temperature.rs (target/debug/deps/temperature-2c0c790adaa7da88)
+test cli_temperature_requires_finite_positive_value ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+

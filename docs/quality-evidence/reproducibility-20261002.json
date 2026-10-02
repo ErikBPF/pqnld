@@ -1,0 +1,10 @@
+{
+  "method": "Parse saved JSONL; join unique run_id; compare payload hashes, status, response.model, response.answers; compare choice and numeric probabilities per question. Ignore timestamps, latency, token usage and raw_output. No scorer or inference invoked.",
+  "comparisons": [
+    {"left":"http-uds-seq1","right":"http-uds-seq2","left_rows":100,"right_rows":100,"left_duplicate_run_ids":0,"right_duplicate_run_ids":0,"joined_rows":100,"left_unmatched":0,"right_unmatched":0,"payload_hash_mismatches":0,"status_mismatches":0,"model_mismatches":0,"answer_keyset_mismatches":0,"exact_answers_matching_rows":100,"answer_questions":760,"unequal_question_objects":0,"choice_changes":0,"probability_keyset_mismatches":0,"max_absolute_probability_delta":0.0},
+    {"left":"http-uds-v7","right":"http-uds-seq1","left_rows":100,"right_rows":100,"left_duplicate_run_ids":0,"right_duplicate_run_ids":0,"joined_rows":100,"left_unmatched":0,"right_unmatched":0,"payload_hash_mismatches":0,"status_mismatches":0,"model_mismatches":0,"answer_keyset_mismatches":0,"exact_answers_matching_rows":3,"answer_questions":760,"unequal_question_objects":748,"choice_changes":37,"probability_keyset_mismatches":0,"max_absolute_probability_delta":0.9746551330804293}
+  ],
+  "input_result_sha256": {"http-uds-v7":"a8301a7f5dc05f5f7a72e4a7a5ddc47b49ad216cf4b69d6e332798346c0ef8aa","http-uds-seq1":"9382d7070177e86ee67663f05fd07ab3d1f6f2b2e9a1288efd737f91dd1bea43","http-uds-seq2":"1289b284208d79209e9f6dbbb8c17d39ff4add67223149ff521a0d7ca3add28b"},
+  "saved_response_usage_keys": ["input_tokens"],
+  "limits": ["No cache-hit/reset attestation in saved response usage; equality does not prove independent inference", "No observed isolation from chat load or stable engine epoch", "v7/seq1 comparison is historical, not a controlled binary A/B", "No result measures revised reliability code", "Sample contains only 100 requests across 44 benchmarks; mostly two requests per benchmark"]
+}

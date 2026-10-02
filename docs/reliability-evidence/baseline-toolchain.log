@@ -1,0 +1,7 @@
+cargo test --manifest-path sidecar-rs/Cargo.toml
+error: process didn't exit successfully: `sccache rustc -vV` (exit status: 2)
+--- stderr
+sccache: error: Timed out waiting for server startup. Maybe the remote service is unreachable?
+Run with SCCACHE_LOG=debug SCCACHE_NO_DAEMON=1 to get more information
+
+make: *** [Makefile:16: test] Error 101

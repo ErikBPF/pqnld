@@ -1,0 +1,140 @@
+cargo test --manifest-path sidecar-rs/Cargo.toml
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling stable_deref_trait v1.2.1
+   Compiling libc v0.2.189
+   Compiling itoa v1.0.18
+   Compiling pin-project-lite v0.2.17
+   Compiling futures-core v0.3.34
+   Compiling litemap v0.8.3
+   Compiling writeable v0.6.4
+   Compiling icu_properties_data v2.3.0
+   Compiling icu_normalizer_data v2.3.0
+   Compiling utf8_iter v1.0.4
+   Compiling smallvec v1.16.2
+   Compiling bytes v1.12.1
+   Compiling serde_core v1.0.229
+   Compiling percent-encoding v2.3.2
+   Compiling slab v0.4.12
+   Compiling futures-task v0.3.34
+   Compiling httparse v1.10.1
+   Compiling try-lock v0.2.5
+   Compiling serde v1.0.229
+   Compiling zmij v1.0.23
+   Compiling once_cell v1.21.4
+   Compiling tower-service v0.3.3
+   Compiling hashbrown v0.17.1
+   Compiling equivalent v1.0.2
+   Compiling serde_json v1.0.151
+   Compiling httpdate v1.0.3
+   Compiling atomic-waker v1.1.2
+   Compiling tower-layer v0.3.3
+   Compiling want v0.3.1
+   Compiling sync_wrapper v1.0.2
+   Compiling futures-channel v0.3.34
+   Compiling ryu v1.0.23
+   Compiling base64 v0.23.1
+   Compiling ipnet v2.12.2
+   Compiling futures-util v0.3.34
+   Compiling form_urlencoded v1.2.2
+   Compiling memchr v2.8.3
+   Compiling bitflags v2.13.2
+   Compiling base64 v0.22.1
+   Compiling log v0.4.34
+   Compiling tracing-core v0.1.36
+   Compiling tracing v0.1.44
+   Compiling http v1.5.0
+   Compiling indexmap v2.14.2
+   Compiling syn v3.0.6
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.3
+   Compiling http-body v1.1.0
+   Compiling http-body-util v0.1.5
+   Compiling synstructure v0.14.0
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling zerovec-derive v0.11.6
+   Compiling displaydoc v0.2.7
+   Compiling tokio-macros v2.7.2
+   Compiling serde_derive v1.0.229
+   Compiling tokio v1.53.1
+   Compiling zerofrom v0.1.8
+   Compiling yoke v0.8.3
+   Compiling zerovec v0.11.8
+   Compiling zerotrie v0.2.5
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.6
+   Compiling icu_collections v2.3.0
+   Compiling icu_locale_core v2.3.0
+   Compiling icu_provider v2.3.1
+   Compiling serde_urlencoded v0.7.1
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling tower v0.5.3
+   Compiling hyper v1.11.1
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling hyper-util v0.1.21
+   Compiling tower-http v0.6.11
+   Compiling reqwest v0.12.28
+   Compiling pqnld-rs v0.3.0 (/work/pqnld-reliability-20261002/sidecar-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.11s
+
+running 29 tests
+test engine::tests::echo_logprobs_response ... ok
+test engine::tests::llamacpp_n_probs_response ... ok
+test engine::tests::openai_top_logprobs_response ... ok
+test engine::tests::llamacpp_n_probs_request_shape ... ok
+test engine::tests::sglang_native_response ... ok
+test engine::tests::vllm_exact_id_request_shape ... ok
+test engine::tests::vllm_exact_id_response ... ok
+test engine::tests::vllm_generic_topk_response ... ok
+test tests::py_float_matches_python_repr ... ok
+test tests::text_serializes_json_like_python ... ok
+test tests_readout::extended_labels_are_unique_and_large ... ok
+test tests_readout::echo_refuses_empty_or_unextended_evidence ... ok
+test tests_readout::echo_refuses_prefix_overlapping_keys ... ok
+test tests_readout::letter_of_accepts_only_single_letters ... ok
+test tests_readout::generic_topk_ignores_non_letter_words ... ok
+test tests_readout::render_lettered_shape_and_empty_state ... ok
+test tests_readout::noul_reports_true_probability ... ok
+test tests_readout::unsupported_question_type_is_refused ... ok
+test tests_readout::validate_rejects_bad_distributions ... ok
+test tests_readout::specific_scores_refuse_missing_labels ... ok
+test tests_readout::specific_scores_produce_a_distribution ... ok
+test tests_readout::cache_preserves_criteria_order ... ok
+test engine::tests::echo_adapters_preserve_initial_unscored_token_alignment ... FAILED
+test engine::tests::echo_adapters_refuse_malformed_or_misaligned_scores ... FAILED
+test tests_readout::malformed_questions_refuse_before_any_engine_request ... ok
+test mcp::tests::malformed_decide_tool_questions_refuse_without_engine_access ... ok
+test tests_readout::valid_http_and_chat_retain_typed_envelopes ... ok
+test tests_readout::over_128_options_split_and_merge_losslessly ... ok
+test tests_readout::http_and_chat_share_input_refusal_without_engine_access ... ok
+
+failures:
+
+---- engine::tests::echo_adapters_preserve_initial_unscored_token_alignment stdout ----
+
+thread 'engine::tests::echo_adapters_preserve_initial_unscored_token_alignment' (14356) panicked at src/engine.rs:854:13:
+assertion `left == right` failed: Vllm dropped unscored token
+  left: ["x"]
+ right: ["ctx", "x"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- engine::tests::echo_adapters_refuse_malformed_or_misaligned_scores stdout ----
+
+thread 'engine::tests::echo_adapters_refuse_malformed_or_misaligned_scores' (14357) panicked at src/engine.rs:831:17:
+Vllm accepted {"logprobs":{"tokens":["ctx","x","suffix"],"token_logprobs":[null,-1.0,"bad"]}}: Ok([("x", -1.0)])
+
+
+failures:
+    engine::tests::echo_adapters_preserve_initial_unscored_token_alignment
+    engine::tests::echo_adapters_refuse_malformed_or_misaligned_scores
+
+test result: FAILED. 27 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/main.rs (target/debug/deps/pqnld_rs-33f8f17826ec3407)
+error: test failed, to rerun pass `--bin pqnld-rs`
+make: *** [Makefile:16: test] Error 101

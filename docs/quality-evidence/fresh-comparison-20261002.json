@@ -1,0 +1,8 @@
+{
+  "method": "Read-only offline unique run_id join of fresh results and historical http-uds-v7; compare payload hash, model, status and full answer objects; compare choice probabilities and noul values. Ignore timestamps/latency. No new inference or scoring run.",
+  "fresh_results_sha256":"55cec65a952bcfe543ecdeae8d903fdceb3620aa352f05f05409468bf9521947",
+  "historical_v7_results_sha256":"a8301a7f5dc05f5f7a72e4a7a5ddc47b49ad216cf4b69d6e332798346c0ef8aa",
+  "fresh_rows":100,"historical_v7_rows":100,"fresh_duplicate_ids":0,"historical_duplicate_ids":0,"joined_rows":100,"fresh_unmatched":0,"historical_unmatched":0,"payload_hash_mismatches":0,"model_mismatches":0,"status_mismatches":0,"answer_keyset_mismatches":0,
+  "identical_answer_rows":100,"question_answers_compared":760,"choice_questions_compared":746,"noul_questions_compared":14,"different_question_objects":0,"choice_changes":0,"max_absolute_choice_probability_delta":0,"max_absolute_noul_delta":0,"native_primary_metric_changes":0,
+  "limits": ["Observed parity in this one fresh run, not proof of general determinism", "Binary provenance is pinned only for fresh run; historical outputs remain historical", "No controlled engine epoch, cache-free execution or mixed-chat isolation", "Identical outputs do not establish causal improvement or calibration; native metrics remain tiny-sample estimates"]
+}

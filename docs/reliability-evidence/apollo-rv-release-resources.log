@@ -1,0 +1,4 @@
+workspace free bytes: 2568669880320
+MemTotal:       230726296 kB
+MemAvailable:   202412896 kB
+release compile budget: CARGO_BUILD_JOBS=2; offline pinned dependencies; no GPU/model calls

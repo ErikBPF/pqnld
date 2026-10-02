@@ -1,0 +1,31 @@
+EXECUTED ONCE under Q-PQNLD-4 RUN. See fresh-command-receipt-20261002.txt and fresh-result-20261002.json. Budget consumed; do not rerun. Historical preparation below is retained as discovery evidence. Q-PQNLD-5 explicitly superseded the string-only assumption before launch: present JSON values preserved; all 100 requests pass final shape contract. Actual source.tar and pinned release executable hashes were independently verified before execution.
+
+Final binary must remain under /work/pqnld-reliability-20261002. Do not guess between target/debug and sidecar-rs/target/debug; use builder/main's exact tested path. Final source hash is provenance from the GREEN handoff, not independently reconstructed by this launcher. Main must establish that source snapshot produced the supplied tested binary.
+
+Exact launch command, with handoff values replacing uppercase placeholders (not executed):
+ssh -o BatchMode=yes -o ConnectTimeout=10 apollo '/mnt/data/ai/validation/decision-index-2026-10-01/pm.sh exec --interactive --env HF_HUB_OFFLINE=1 --env PYTHONDONTWRITEBYTECODE=1 --workdir /work dibuild /work/venv/bin/python -B - /work/pqnld-reliability-20261002/EXACT_BINARY_PATH FINAL_BINARY_SHA256 FINAL_TESTED_SOURCE_SNAPSHOT_SHA256' < docs/quality-evidence/fresh-run-supervisor-20261002.txt
+
+The supervisor is preparation text, not installed source. Main must validate its final handoff/recipe against the reviewed binary before RUN. It performs no compilation, source edits, dataset copying, engine restart/configuration or scorer tuning. It claims two previously absent directories exclusively, validates pinned input hashes, records model API identity (not a checkpoint-content hash), copies only the descriptor and forces readout=lettered plus specific_token_scores=true. Original descriptor auto mode could fall back to echo; the task-copy override prevents that rather than retrying. Temperature remains descriptor value 1.0, MTP/model/engine flags unchanged.
+
+Exact owned sidecar command:
+FINAL_BINARY --engine-kind vllm --vllm-url http://100.77.14.27:11542 --model qwen38-27b-nvfp4 --descriptor qwen38-27b-nvfp4 --models-dir /work/pqnld-quality-run-20261002/desc --host 127.0.0.1 --port 11574 --workers 1 --temperature 1 --timeout 600
+
+Exact official pipeline command, launched once:
+/work/venv/bin/python -B -m decision_index pipeline --engine http --option base_url=http://127.0.0.1:11574 --option model=qwen38-27b-nvfp4 --option timeout=600 --rows /work/sample-100.jsonl.gz --suite-dir /work/suite --edition 0.2.1 --limit 100 --fresh --compact --out /work/runs/http-repaired-sample100-20261002
+
+Official runner is synchronous; workers=1 additionally applies accepted global sidecar admission/order semantics. Direct engine chat is outside that bound. Explicit rows+limit constrain sample, --fresh avoids resume, --compact omits payload/raw_output duplication but preserves official responses/results on Apollo. Required suite files already exist; HF_HUB_OFFLINE=1 prevents fallback Hub downloads. The stock runner makes TWO built-in synthetic warmup requests; include them in this one attempt and 900-second budget. No CLI switch disables them. New sidecar process begins with blank cache, but repeated warmup may cache; do not clear shared engine cache.
+
+Pre-run issue: 11/100 sample requests violate documented R1 string instructions/string-or-null criteria (ToolRet 3, BRIGHT 2, POP909-CL 2, cfcolor 2, ChessBench 2). Keep original JSON. Refusals are an observed compatibility outcome, not permission to coerce inputs or weaken acceptance. Official HTTP engine may classify these 422 responses as errors rather than unsupported. Main must reconcile the finding before claiming repaired benchmark compatibility; no promise of 100 ok or 89 ok.
+
+Owned output paths:
+/work/pqnld-quality-run-20261002/desc/qwen38-27b-nvfp4.json
+/work/pqnld-quality-run-20261002/sidecar.log
+/work/pqnld-quality-run-20261002/pipeline.log
+/work/pqnld-quality-run-20261002/receipt-summary.json
+/work/runs/http-repaired-sample100-20261002/{environment.json,status.json,results.jsonl,benchmark-summary.json,index.json,scores.json}
+
+Stop: existing output/runtime path, changed pin, missing GREEN-linked artifact, occupied port, model mismatch, failed engine GET, sidecar death, pipeline error or deadline. The supervisor reserves 20 seconds for owned-child cleanup: request generation stops by 880 seconds from sidecar launch, within the 900-second cap. Summary-only readback happens after stopped/reaped processes. No alternate port/model/readout, retry, MTP change or engine restart. Poll engine /health every ~5s during the attempt. Stop request generation and terminate/reap only launcher-owned pipeline/temporary sidecar handles; never use pkill, process-name matching, group kills or existing-engine PID. Engine may finish a request already accepted after local cancellation.
+
+Cleanup proof in receipt: owned PIDs, termination/reaped return codes, candidate-port listeners after cleanup, stop reason and monotonic elapsed. Refuse occupied port before launch; actual bind failure is fatal, not fallback. Sidecar target is loopback; GET /healthz readiness issues no scoring request. Do not call sidecar /v1/systemone before the one official pipeline.
+
+After RUN, export receipt-summary.json and allowlisted native aggregate metrics only. Verify original run_id/payload-hash overlap with historical sample, model/source/binary/descriptor/scorer/data/results hashes, sample completion/refusal statuses, case/field denominators, coverage and official complete/index flags. Do not transfer rows, answers, labels, full environment, logs or credentials. Native metrics differ by task; no pooled accuracy or causal historical before/after claim. Checkpoint-content hash remains unknown unless owning source supplies an existing trusted weight manifest; model API hash is explicitly weaker identity evidence.

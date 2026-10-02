@@ -1,0 +1,32 @@
+Scope: authorized offline suite verification and TWO saved-result scores, 600-second timeout per score. All commands exited 0. No repairs, inference, downloads, installation, service changes or source edits.
+Access: ssh -G apollo -> erik, port 2222; owning fleet tailnet 100.77.14.27; pinned [apollo]:2222 key accepted without changing SSH policy.
+
+Verification executed from local host:
+ssh -o BatchMode=yes -o ConnectTimeout=10 apollo '/mnt/data/ai/validation/decision-index-2026-10-01/pm.sh exec --env HF_HUB_OFFLINE=1 --env PYTHONDONTWRITEBYTECODE=1 --workdir /work dibuild /work/venv/bin/python -B -m decision_index suite verify --dir /work/suite --edition 0.2.1'
+Observed JSON: match=true, uncompressed_match=true, added_match=true, exclusions_match=true, subsets_match=true. CLI uses strict=False; JSON predicates, not exit alone, establish verification.
+
+Primary executed via ssh -o BatchMode=yes -o ConnectTimeout=10 apollo 'bash -s', script:
+set -eu
+W=/mnt/data/ai/validation/decision-index-2026-10-01
+"$W/pm.sh" exec --env HF_HUB_OFFLINE=1 --env PYTHONDONTWRITEBYTECODE=1 --workdir /work dibuild sh -c '
+set -eu
+out=/work/runs/http-uds-v7-offline-20261002
+if [ -e "$out" ] || [ -L "$out" ]; then printf "Refusing existing output path\n" >&2; exit 73; fi
+command -v timeout >/dev/null
+exec timeout 600s /work/venv/bin/python -B -m decision_index score --suite-dir /work/suite --edition 0.2.1 --results /work/runs/http-uds-v7/results.jsonl --engine http --out "$out"
+'
+
+Historical reference executed via same SSH command, script:
+set -eu
+W=/mnt/data/ai/validation/decision-index-2026-10-01
+"$W/pm.sh" exec --env HF_HUB_OFFLINE=1 --env PYTHONDONTWRITEBYTECODE=1 --workdir /work dibuild sh -c '
+set -eu
+out=/work/runs/http-uds-seq1-offline-20261002
+if [ -e "$out" ] || [ -L "$out" ]; then printf "Refusing existing output path\n" >&2; exit 73; fi
+command -v timeout >/dev/null
+exec timeout 600s /work/venv/bin/python -B -m decision_index score --suite-dir /work/suite --edition 0.2.1 --results /work/runs/http-uds-seq1/results.jsonl --engine uds_engine:UdsSystemOne --out "$out"
+'
+
+Both scorer JSON outputs: edition=0.2.1, decision_index=0.0, balanced_raw=0.11, completed=100, complete=false. Full output/source/result hashes and area coverage retained in offline-score-20261002.json. Native task metrics retained in native-metrics-20261002.json. Offline run_id-joined comparison retained in reproducibility-20261002.json; seq2 not scored.
+
+Post-run validation exited 0: all 88 stored native benchmark metric records matched the two official fresh summaries; six output hashes matched; three saved-result hashes, three scorer-source hashes, manifest and sample hashes remained unchanged. Final kit commit and clean status unchanged; selected/added gzip and exclusions hashes unchanged. Three local JSON files parsed; four report links resolved; forbidden raw-row/response/label/credential object keys absent. No application-code test run: this subtask changes summary documentation only.

@@ -1,4 +1,5 @@
 *.log
+!/docs/reliability-evidence/*.log
 *.secrets.json
 *.secret.json
 /worktrees/

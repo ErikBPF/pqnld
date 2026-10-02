@@ -1,0 +1,88 @@
+{
+  "authorization": "Q-PQNLD-4 RUN, after approved Q-PQNLD-5 Preserve JSON amendment and Apollo debug/release GREEN (47 tests each, supplied by main)",
+  "command_exit": 0,
+  "pipeline_attempts": 1,
+  "host": "apollo",
+  "container": "dibuild",
+  "output": "/work/runs/http-repaired-sample100-20261002",
+  "runtime": "/work/pqnld-quality-run-20261002",
+  "python": "3.12.3",
+  "official_kit_version": "0.2.1",
+  "official_kit_commit": "87d4650b42b377c0291a89c1f1a879f9b31082bf",
+  "artifact_pins": {
+    "source_archive": "/work/pqnld-reliability-20261002/artifacts/866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72/source.tar",
+    "source_archive_sha256_verified": "866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72",
+    "release_binary": "/work/pqnld-reliability-20261002/artifacts/866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72/pqnld-rs-release",
+    "release_binary_sha256_before_running_and_after": "ded05dca02e73849c8f9a88da981e717bb20211086796c2477e53d12caa6d87a",
+    "debug_binary_sha256_verified_not_used": "cbcfe14cb4489acb8ae56a5a1f4a027f375bd649197b42e9bff35fb2e13dad56",
+    "task_descriptor_sha256": "2a9f6df5b4ac8c9600f67f8cf28232e54137e84d731981e9c17135045ea44aa5",
+    "descriptor_transform": {"specific_token_scores": true, "readout": "lettered"},
+    "original_descriptor_sha256_unchanged": "6325676e7e554b7564ea23ee5567d9928c7ac8ce1b7b548fa95e85f2a795e38f"
+  },
+  "model": {
+    "endpoint": "http://100.77.14.27:11542",
+    "id": "qwen38-27b-nvfp4",
+    "owner": "vllm",
+    "root": "/model",
+    "max_model_len_readback": 200000,
+    "normalized_identity_sha256": "c36a99b092350bc0343c51402970b39a7cd40e5dc3d24a9b135e72e2e0826d96",
+    "normalized_hash_definition": "SHA256 of UTF-8 json.dumps([{id,owned_by,root,max_model_len}],sort_keys=True,separators=(',',':'))",
+    "models_response_sha256_before": "e2942066d342b4489db08f139bd8ec42065735f84d5b511e271bb5f185454b25",
+    "models_response_sha256_after": "31770ce5618dfa6252f21fde1ae71c841abd8fce4d31bf7eccc280d9d6cfca56",
+    "volatile_model_API_fields_observed": ["created", "permission"],
+    "checkpoint_content_sha256": null,
+    "limit": "Model API identity is not a weights hash or stable engine-epoch attestation"
+  },
+  "engine_health": {"before_status":200,"after_status":200,"after_cleanup_status":200,"successful_gets":59,"failed_gets":0},
+  "input_sha256": {
+    "sample-100.jsonl.gz": "640b3af5bc8854ef349eb8645723361c861e9d2201e005074b24955b38d2be4d",
+    "sample_uncompressed_content": "ca4de0bfa014b05ecd78789d82d73d5db85580485a50eb05e3956b48f5264aee",
+    "suite/manifest.json": "ff77c78ff4f48835db51b061b006b345d679e1530ba1261a3a4ceb792a89638d",
+    "suite/selected-rows.jsonl.gz": "eb2f1927658f6cb28d46950a6f655efd3562600e92395f651be196f247f466c4",
+    "suite/added-rows.jsonl.gz": "e0d18104c835dd62d3e93342156eb7cd584b0919efc15d4e51c61961b9e3e048",
+    "suite/excluded-questions.json": "331df32d4b719c7db43214d0e5d85859d39c3b2eb7d0b3812214cce150155e81"
+  },
+  "accepted_input_contract": {"decision":"Q-PQNLD-5 Preserve JSON","requests":100,"requested_questions":760,"choice":746,"noul":14,"invalid_requests":0,"invalid_fields":0,"transforms_or_dropped_rows":0,"string_only_preflight_superseded_by_human_approval":true},
+  "result": {
+    "result_rows":100,"unique_run_ids":100,"outside_sample":0,"sample_id_overlap":100,
+    "sample_status_counts":{"ok":100,"error":0,"unsupported":0,"abstained":0},
+    "represented_benchmarks":44,"scored_requests":100,"suite_eligible_requests":150317,"pending_suite_requests":150217,
+    "sample_request_completion":0.0006652607489505512,
+    "official_edition":"0.2.1","official_completed":100,"official_complete":false,"decision_index":0.0,"raw_index":0.11,"weighted_index_coverage":0.0031,
+    "scores":{"balanced_raw":0.11,"balanced_skill":0.0,"breadth_skill":0.0},
+    "status_time":"2026-10-02T15:19:54.264172+00:00"
+  },
+  "timing": {
+    "official_sample_run_elapsed_seconds":222.5,
+    "official_run_denominator":"100 sampled requests; excludes engine loading, two built-in warmups and native offline scoring",
+    "pipeline_observed_elapsed_seconds":270.068,
+    "pipeline_denominator":"One official pipeline: startup/imports, warmups, 100 requests, native scoring, up to ~5 seconds supervisor observation lag",
+    "supervised_sidecar_through_cleanup_elapsed_seconds":270.306,
+    "successful_HTTP_request_latency_ms":{"mean":2225.1,"median":321.1,"p95":14284.2},
+    "latency_denominator":100,
+    "latency_limit":"Successful request wall time includes sidecar prompt construction and inference/cache effects, not individual-question latency; cache-free or isolated engine execution not established",
+    "built_in_synthetic_warmup_requests_not_scored":2,
+    "request_window_cap_seconds":880,
+    "cleanup_reserve_seconds":20,
+    "total_authorized_cap_seconds":900
+  },
+  "cleanup": {"workers":1,"loopback_port":11574,"port_unused_before_launch":true,"listener_owned_by_sidecar_verified":true,"sidecar_pid":37726,"pipeline_pid":37755,"pipeline_returncode":0,"sidecar_returncode":-15,"pipeline_reaped":true,"sidecar_reaped":true,"owned_PID_proc_entries_absent_at_readback":true,"port_listening_after_cleanup":false,"stop_reason":null,"other_processes_killed":false},
+  "output_sha256": {
+    "benchmark-summary.json":"ee32d0128b5b71a766f4959e94e9d4f4a77d5cabc4cdcb873e6e488a38342ee3",
+    "environment.json":"06ad7fcc6cac7d1e87fca2d66e43cf38a578a9333c36ca11a0dfe228641559ab",
+    "index.json":"090b906264aa507c23276fe1ff5b1dd9d0ca40c47df75ceab290b9d489dc1307",
+    "results.jsonl":"55cec65a952bcfe543ecdeae8d903fdceb3620aa352f05f05409468bf9521947",
+    "scores.json":"d8f0a1227692fef3fe51db207a46a8be1386d75f31b18a828e804bfef620c1f9",
+    "status.json":"215f4770d4c7cfed0030a729b93bcd98c1261c7bd8635f05d25db2ae9aeb429d"
+  },
+  "scorer_sha256": {
+    "decision_index/cli.py":"20f362022d3fead61743b74bb268d58164446b88fff5df69460abfc2bebd1f1c",
+    "decision_index/engines/base.py":"de4e510519ad2d1d723e1e25bcfcea820c4fcd6f8840a936bda8d44d40b7fd67",
+    "decision_index/engines/http.py":"d8dbb8146ca5e002dd790f3b1c35e80cc42f99a7c56eddd39dc14b69ffaf9aae",
+    "decision_index/pipeline.py":"1076f19c24ffef1cdc6a8b45258e7845f50c8f65276af422649908e50b289745",
+    "decision_index/runner.py":"f4c9f36c4c557f537f1d8184db7bf00c5a84d9f4f0aa67f8c06198cead25818d"
+  },
+  "validation": {"remote_only":true,"native_metric_records_matched_against_official_output":44,"fresh_output_hashes_matched":6,"scorer_hashes_matched":5,"source_and_release_pins_preserved":true,"historical_join_rows_matched":100,"identical_full_answer_objects_verified":760,"owned_PID_proc_entries_absent":true,"additional_inference_or_scoring_runs":0,"receipt_decimal_transcription_repair":"Sample completion fraction corrected to actual 100/150317; benchmark acceptance/results unchanged"},
+  "privacy": {"runtime_and_output_directory_mode":"0700","raw_results_and_receipt_mode":"0600","raw_rows_responses_labels_logs_remain_on_apollo":true,"export":"Aggregate metrics/counts/hashes only","no_credentials_or_full_environment_exported":true,"no_dataset_tuning_or_training":true},
+  "limits": ["100 ok means valid response, not correctness", "Fresh result belongs to pinned repaired release; historical outputs do not", "One small sample does not establish calibration, full-suite quality, tokenizer ceiling or mixed-chat/MTP readiness", "No controlled engine epoch, checkpoint-content hash, shared-engine cache reset or external chat isolation", "No causal improvement claim; no additional attempt authorized"]
+}

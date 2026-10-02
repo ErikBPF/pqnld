@@ -1,0 +1,30 @@
+Q-PQNLD-4 RUN authorized after final reviewed Apollo GREEN; Q-PQNLD-5 human amendment Preserve JSON accepted before inference. Prior 11-request string-only preflight is superseded by that explicit amendment, not dataset coercion or removal of failure evidence.
+
+Executed once from pqnld task checkout; command exited 0:
+ssh -o BatchMode=yes -o ConnectTimeout=10 apollo '/mnt/data/ai/validation/decision-index-2026-10-01/pm.sh exec --interactive --env HF_HUB_OFFLINE=1 --env PYTHONDONTWRITEBYTECODE=1 --workdir /work dibuild /work/venv/bin/python -B - /work/pqnld-reliability-20261002/artifacts/866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72/pqnld-rs-release ded05dca02e73849c8f9a88da981e717bb20211086796c2477e53d12caa6d87a 866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72' < docs/quality-evidence/fresh-run-supervisor-20261002.txt
+
+Supervisor text syntax/AST checks ran on Apollo before execution; no local validator/build/test ran. Immutable source.tar SHA256 and both debug/release binary SHA256 values were verified; only release executed. Archive contents were not rewritten/extracted. Builder's prior debug/release 47-test gates are main-supplied GREEN evidence, not tests rerun by this subtask.
+
+Owned sidecar command:
+/work/pqnld-reliability-20261002/artifacts/866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72/pqnld-rs-release --engine-kind vllm --vllm-url http://100.77.14.27:11542 --model qwen38-27b-nvfp4 --descriptor qwen38-27b-nvfp4 --models-dir /work/pqnld-quality-run-20261002/desc --host 127.0.0.1 --port 11574 --workers 1 --temperature 1 --timeout 600
+
+Exactly ONE official pipeline command:
+/work/venv/bin/python -B -m decision_index pipeline --engine http --option base_url=http://127.0.0.1:11574 --option model=qwen38-27b-nvfp4 --option timeout=600 --rows /work/sample-100.jsonl.gz --suite-dir /work/suite --edition 0.2.1 --limit 100 --fresh --compact --out /work/runs/http-repaired-sample100-20261002
+
+Fresh runtime/output paths were absent before exclusive creation, modes 0700; files 0600. Input/source/scorer/descriptor/model checks ran before launch. Original sample 100 requests/760 questions (746 choice,14 noul) had zero missing/nonobject/unsupported-type/cardinality failures under approved present-JSON contract; no transformations/dropped rows. Task-copy descriptor forced lettered+exact scores; original descriptor unchanged. Running /proc/PID/exe hash matched release pin and listener socket belonged to owned PID before pipeline started.
+
+Observed result: status complete 2026-10-02T15:19:54.264172+00:00; 100 ok,0 error/unsupported/abstained. Original sample ID overlap 100,0 duplicate/outside IDs. Two stock synthetic warmup requests occurred outside scored denominator, inside same attempt. Official run 222.5s excludes warmup/native scoring; observed complete pipeline 270.068s includes warmups/scoring and up to ~5s polling lag; sidecar-start-through-cleanup 270.306s. Successful HTTP request latencies on 100 requests: median321.1ms,p95 14284.2ms,mean2225.1ms; not per-question/cache-free latency.
+
+Native edition0.2.1 score: decision_index0.0,raw_index0.11,weighted coverage0.0031,complete=false; 100/150317 eligible requests answered/scored,150217 pending; 44 benchmarks represented. Native metrics/denominators in fresh-native-metrics-20261002.json; no pooled accuracy. 100 ok is valid response count, not correct decisions.
+
+Cleanup: owned sidecarPID37726 and pipelinePID37755, loopback11574 owner verified. Pipeline exit0/reaped; owned sidecar terminated SIGTERM(returncode-15)/reaped. /proc entries absent at readback,port has no listeners. Stop reason null. Engine /health:59 successes,0 failures; before/after/after-cleanup HTTP200. Only owned child handles signaled, no process-name/group/existing-engine kills. No retries, model switch, echo fallback, engine restart/configuration, MTP change, installation, compilation, source modification, tuning or training.
+
+Fresh/historical-v7 read-only run_id/payload-hash join:100 matches,0 payload/model/status/keyset mismatches; all760 answer objects identical (746 choices,14 noul),0 choice changes/probability deltas,0 native primary metric changes. Engine epoch/load/cache not controlled; this is observed parity, not causal improvement/general determinism. New process cache was blank at startup; repeated warmup/server cache effects were not disabled.
+
+Model id qwen38-27b-nvfp4 remained served by vllm. Normalized identity hashc36a99b092350bc0343c51402970b39a7cd40e5dc3d24a9b135e72e2e0826d96; raw /v1/models response hashes differ because metadata fields created/permission were observed volatile. API identity is not checkpoint-content hash; weights hash unknown. No full environment or model API response exported.
+
+Raw logs/results remain restricted Apollo runtime/output directories. Local reports contain only sanitized commands, aggregate metrics/counts/hashes and limitations. Full pins/output hashes in fresh-result-20261002.json. No second pipeline/scorer authorized or attempted.
+
+Remote-only receipt validation:44 stored native metric records match official output;6 output hashes,5 scorer hashes and immutable source/release hashes match; owned PIDs absent. Historical join verifies100 identical payload/model/answer rows and760 full answer objects. One local-receipt decimal transcription failed a remote ratio check; corrected to actual100/150317=0.0006652607489505512, same check then passed. No benchmark retry, behavior change or additional scoring/inference. Supplemental sample metadata reports100 requests/91 stored groups by catalog/760 requested questions; these are not interchangeable metric or independence denominators.
+
+Final report audit: native44/metadata44 records verified remotely; original input/output hashes preserved and11574 still released. Conservative raw-key audit initially flagged the numeric question-count key name; renamed requested_questions (count760, no raw content), same audit passed. No acceptance or audit weakened; no local validator/process beyond SSH transport and no extra model/scorer attempt.

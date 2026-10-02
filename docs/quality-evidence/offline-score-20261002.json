@@ -1,0 +1,48 @@
+{
+  "scope": "Historical saved-output scoring only; does not measure revised binary",
+  "host": "apollo",
+  "host_artifact_root": "/mnt/data/ai/validation/decision-index-2026-10-01",
+  "container": "dibuild",
+  "container_artifact_root": "/work",
+  "runtime": {"interpreter": "/work/venv/bin/python", "python": "3.12.3", "package": "decision-index", "version": "0.2.1", "editable_source": "/work/kit", "kit_commit": "87d4650b42b377c0291a89c1f1a879f9b31082bf", "kit_clean": true},
+  "controls": {"HF_HUB_OFFLINE": "1", "PYTHONDONTWRITEBYTECODE": "1", "python_flag": "-B", "score_runs": 2, "score_timeout_seconds_each": 600, "output_paths_previously_absent": true, "inference": false, "network_fetch": false},
+  "suite_verification": {
+    "command_exit": 0, "edition": "0.2.1", "match": true, "uncompressed_match": true, "added_match": true, "exclusions_match": true, "subsets_match": true,
+    "manifest_sha256": "ff77c78ff4f48835db51b061b006b345d679e1530ba1261a3a4ceb792a89638d",
+    "selected_gzip_sha256": "eb2f1927658f6cb28d46950a6f655efd3562600e92395f651be196f247f466c4",
+    "manifest_selected_gzip_sha256": "25aac5e890a54a3172c7a0c184b4cc8b9a43f10b6ee89bbad8da923be423c656",
+    "selected_content_sha256": "b2b56d6fb636837ca469e689087bdbf373dda8de7638aa2da6793e6eda0792d5",
+    "added_gzip_sha256": "e0d18104c835dd62d3e93342156eb7cd584b0919efc15d4e51c61961b9e3e048",
+    "added_content_sha256": "7429f3c9cdddb772c1cfc42bb2a45e8516b0032152b746e6929f1c8b52f4ce89",
+    "exclusions_sha256": "331df32d4b719c7db43214d0e5d85859d39c3b2eb7d0b3812214cce150155e81",
+    "physical_selected_rows": 124971, "physical_added_rows": 30419,
+    "base_requests": 120340, "base_scoreable_requests": 119898, "excluded_requests": 442, "added_requests": 30419, "total_scoreable_requests": 150317, "benchmarks": 44, "index_benchmarks": 38
+  },
+  "source_sha256": {
+    "decision_index/pipeline.py": "1076f19c24ffef1cdc6a8b45258e7845f50c8f65276af422649908e50b289745",
+    "decision_index/cli.py": "20f362022d3fead61743b74bb268d58164446b88fff5df69460abfc2bebd1f1c",
+    "decision_index/runner.py": "f4c9f36c4c557f537f1d8184db7bf00c5a84d9f4f0aa67f8c06198cead25818d"
+  },
+  "sample": {"path": "/work/sample-100.jsonl.gz", "rows": 100, "gzip_sha256": "640b3af5bc8854ef349eb8645723361c861e9d2201e005074b24955b38d2be4d"},
+  "runs": {
+    "http-uds-v7": {
+      "command_exit": 0, "engine": "http", "model": "qwen38-27b-nvfp4", "scored_utc": "2026-10-02T13:46:04+00:00", "output": "/work/runs/http-uds-v7-offline-20261002",
+      "result_sha256": "a8301a7f5dc05f5f7a72e4a7a5ddc47b49ad216cf4b69d6e332798346c0ef8aa",
+      "output_sha256": {"benchmark-summary.json": "995d7bd7f83cf9f9edfb7612a696e5119725a42b6fac39264e9da17f4555473d", "index.json": "090b906264aa507c23276fe1ff5b1dd9d0ca40c47df75ceab290b9d489dc1307", "scores.json": "4ee7bf160fb8d8fed64139cf72dd159d36cea2f496c905a3b6084d30f52007b5"},
+      "completed": 100, "scored_requests": 100, "represented_benchmarks": 44, "counts": {"ok": 100, "unsupported": 0, "error": 0, "abstained": 0}, "pending_suite_requests": 150217, "complete": false,
+      "decision_index": 0.0, "raw_index": 0.11, "weighted_index_coverage": 0.0031,
+      "scores": {"balanced_skill": 0.0, "balanced_raw": 0.11, "breadth_skill": 0.0},
+      "areas": [{"id":"knowledge","raw":0.001,"skill":0.0,"coverage":0.0025,"n":10},{"id":"language","raw":0.0009,"skill":0.0,"coverage":0.0027,"n":10},{"id":"retrieval","raw":0.0015,"skill":0.0,"coverage":0.0021,"n":6},{"id":"tools","raw":0.0014,"skill":0.0,"coverage":0.0068,"n":5},{"id":"arts","raw":0.0006,"skill":0.0,"coverage":0.0014,"n":7}]
+    },
+    "http-uds-seq1": {
+      "command_exit": 0, "engine": "uds_engine:UdsSystemOne", "model": "qwen38-27b-nvfp4", "scored_utc": "2026-10-02T13:46:55+00:00", "output": "/work/runs/http-uds-seq1-offline-20261002",
+      "result_sha256": "9382d7070177e86ee67663f05fd07ab3d1f6f2b2e9a1288efd737f91dd1bea43",
+      "output_sha256": {"benchmark-summary.json": "43f27a139e7b2ebfd4e317e424bc38c909f360d940c5b49a503062b2aa12241f", "index.json": "60054b0e1df746cc02192d0b2f25beff5950d6eecb328bcfb2c19fee34c54fcc", "scores.json": "692dad5d922d5253c5e5f094d3db4325cb67c57580794eb7c066a2b76690c3d0"},
+      "completed": 100, "scored_requests": 100, "represented_benchmarks": 44, "counts": {"ok": 100, "unsupported": 0, "error": 0, "abstained": 0}, "pending_suite_requests": 150217, "complete": false,
+      "decision_index": 0.0, "raw_index": 0.11, "weighted_index_coverage": 0.0031,
+      "areas": [{"id":"knowledge","raw":0.0011,"skill":0.0,"coverage":0.0025,"n":10},{"id":"language","raw":0.0011,"skill":0.0,"coverage":0.0027,"n":10},{"id":"retrieval","raw":0.0015,"skill":0.0,"coverage":0.0021,"n":6},{"id":"tools","raw":0.001,"skill":0.0,"coverage":0.0068,"n":5},{"id":"arts","raw":0.0007,"skill":0.0,"coverage":0.0014,"n":7}]
+    }
+  },
+  "validation": {"command_exit": 0, "official_benchmark_metric_records_matched": 88, "fresh_output_hashes_matched": 6, "saved_result_hashes_preserved": 3, "scorer_source_hashes_preserved": 3, "manifest_and_sample_hashes_preserved": true, "selected_added_and_exclusions_hashes_preserved": true, "kit_commit_and_clean_state_rechecked": true, "local_json_files_validated": 3, "report_links_validated": 4, "forbidden_raw_data_keys_absent": true},
+  "privacy": {"report_contains_raw_rows": false, "report_contains_responses": false, "report_contains_expected_labels": false, "report_contains_full_environment": false, "kit_license": "MIT", "corpus_redistribution_permission_inferred": false}
+}

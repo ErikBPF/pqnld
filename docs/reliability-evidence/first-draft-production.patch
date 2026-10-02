@@ -1,0 +1,575 @@
+diff --git a/sidecar-rs/src/engine.rs b/sidecar-rs/src/engine.rs
+index c5f9cfe..fb15bb9 100644
+--- a/sidecar-rs/src/engine.rs
++++ b/sidecar-rs/src/engine.rs
+@@ -14,6 +14,8 @@ use std::sync::Arc;
+ use serde_json::{json, Value};
+ 
+ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
++// The first prompt token can legitimately have no conditional score.
++pub type PromptLogprobs = Vec<(String, Option<f64>)>;
+ 
+ #[derive(Debug)]
+ pub enum EngineError {
+@@ -70,14 +72,14 @@ pub trait Engine: Send + Sync {
+         ids: &'a [u32],
+     ) -> BoxFuture<'a, Result<Vec<(u32, f64)>, EngineError>>;
+     fn topk<'a>(&'a self, prompt: &'a str, k: usize) -> BoxFuture<'a, Result<Vec<(String, f64)>, EngineError>>;
+-    fn prompt_logprobs<'a>(&'a self, raw_prompt: &'a str) -> BoxFuture<'a, Result<Vec<(String, f64)>, EngineError>>;
++    fn prompt_logprobs<'a>(&'a self, raw_prompt: &'a str) -> BoxFuture<'a, Result<PromptLogprobs, EngineError>>;
+ 
+     /// Batched echo; the vLLM path sends the prompt array in one request, which
+     /// is what bounds prompt-logprob memory. Other engines loop.
+     fn prompt_logprobs_batch<'a>(
+         &'a self,
+         prompts: &'a [String],
+-    ) -> BoxFuture<'a, Result<Vec<Vec<(String, f64)>>, EngineError>> {
++    ) -> BoxFuture<'a, Result<Vec<PromptLogprobs>, EngineError>> {
+         Box::pin(async move {
+             let mut out = Vec::with_capacity(prompts.len());
+             for prompt in prompts {
+@@ -305,30 +307,22 @@ impl Engine for VllmEngine {
+         })
+     }
+ 
+-    fn prompt_logprobs<'a>(&'a self, raw_prompt: &'a str) -> BoxFuture<'a, Result<Vec<(String, f64)>, EngineError>> {
++    fn prompt_logprobs<'a>(&'a self, raw_prompt: &'a str) -> BoxFuture<'a, Result<PromptLogprobs, EngineError>> {
+         Box::pin(async move {
+             let body = self.endpoint.echo_body(json!(raw_prompt), 1);
+             let payload = self.endpoint.post_json("/v1/completions", &body).await?;
+-            Ok(payload
+-                .get("choices")
+-                .and_then(|c| c.get(0))
+-                .map(parse_echo_choice)
+-                .unwrap_or_default())
++            Ok(parse_echo_choices(&payload, 1)?.remove(0))
+         })
+     }
+ 
+     fn prompt_logprobs_batch<'a>(
+         &'a self,
+         prompts: &'a [String],
+-    ) -> BoxFuture<'a, Result<Vec<Vec<(String, f64)>>, EngineError>> {
++    ) -> BoxFuture<'a, Result<Vec<PromptLogprobs>, EngineError>> {
+         Box::pin(async move {
+             let body = self.endpoint.echo_body(json!(prompts), 1);
+             let payload = self.endpoint.post_json("/v1/completions", &body).await?;
+-            Ok(payload
+-                .get("choices")
+-                .and_then(|c| c.as_array())
+-                .map(|choices| choices.iter().map(parse_echo_choice).collect())
+-                .unwrap_or_default())
++            parse_echo_choices(&payload, prompts.len())
+         })
+     }
+ 
+@@ -390,7 +384,7 @@ impl Engine for LlamaCppEngine {
+         })
+     }
+ 
+-    fn prompt_logprobs<'a>(&'a self, _raw_prompt: &'a str) -> BoxFuture<'a, Result<Vec<(String, f64)>, EngineError>> {
++    fn prompt_logprobs<'a>(&'a self, _raw_prompt: &'a str) -> BoxFuture<'a, Result<PromptLogprobs, EngineError>> {
+         Box::pin(async move {
+             Err(EngineError::Unsupported(
+                 "llama.cpp native completion has no echo prompt logprobs".to_string(),
+@@ -474,7 +468,7 @@ impl Engine for SglangEngine {
+         })
+     }
+ 
+-    fn prompt_logprobs<'a>(&'a self, raw_prompt: &'a str) -> BoxFuture<'a, Result<Vec<(String, f64)>, EngineError>> {
++    fn prompt_logprobs<'a>(&'a self, raw_prompt: &'a str) -> BoxFuture<'a, Result<PromptLogprobs, EngineError>> {
+         Box::pin(async move {
+             let body = json!({
+                 "text": raw_prompt,
+@@ -483,7 +477,7 @@ impl Engine for SglangEngine {
+                 "sampling_params": {"max_new_tokens": 1, "temperature": 0},
+             });
+             let payload = self.generate(&body).await?;
+-            Ok(parse_sglang_prompt(&payload))
++            parse_sglang_prompt(&payload)
+         })
+     }
+ 
+@@ -541,15 +535,11 @@ impl Engine for OpenAiEngine {
+         })
+     }
+ 
+-    fn prompt_logprobs<'a>(&'a self, raw_prompt: &'a str) -> BoxFuture<'a, Result<Vec<(String, f64)>, EngineError>> {
++    fn prompt_logprobs<'a>(&'a self, raw_prompt: &'a str) -> BoxFuture<'a, Result<PromptLogprobs, EngineError>> {
+         Box::pin(async move {
+             let body = self.endpoint.echo_body(json!(raw_prompt), 5);
+             let payload = self.endpoint.post_json("/v1/completions", &body).await?;
+-            Ok(payload
+-                .get("choices")
+-                .and_then(|c| c.get(0))
+-                .map(parse_echo_choice)
+-                .unwrap_or_default())
++            Ok(parse_echo_choices(&payload, 1)?.remove(0))
+         })
+     }
+ 
+@@ -742,49 +732,176 @@ fn parse_sglang_topk(payload: &Value) -> Option<Vec<(String, f64)>> {
+     Some(out)
+ }
+ 
+-fn parse_sglang_prompt(payload: &Value) -> Vec<(String, f64)> {
+-    payload
++fn invalid_echo() -> EngineError {
++    EngineError::Other("echo response has malformed or misaligned token scores".to_string())
++}
++
++fn prompt_score(value: &Value, index: usize) -> Result<Option<f64>, EngineError> {
++    if index == 0 && value.is_null() {
++        return Ok(None);
++    }
++    match value.as_f64() {
++        Some(score) if score.is_finite() => Ok(Some(score)),
++        _ => Err(invalid_echo()),
++    }
++}
++
++fn parse_sglang_prompt(payload: &Value) -> Result<PromptLogprobs, EngineError> {
++    let items = payload
+         .get("meta_info")
+         .and_then(|meta| meta.get("input_token_logprobs"))
+         .and_then(|v| v.as_array())
+-        .map(|items| {
+-            items
+-                .iter()
+-                .filter_map(|item| {
+-                    let triple = item.as_array()?;
+-                    let logprob = triple.first()?.as_f64()?;
+-                    let token = triple.get(2)?.as_str()?;
+-                    Some((token.to_string(), logprob))
+-                })
+-                .collect()
+-        })
+-        .unwrap_or_default()
++        .filter(|items| !items.is_empty())
++        .ok_or_else(invalid_echo)?;
++    items.iter().enumerate().map(|(index, item)| {
++        let triple = item.as_array().ok_or_else(invalid_echo)?;
++        let token = triple.get(2).and_then(Value::as_str).ok_or_else(invalid_echo)?;
++        let score = prompt_score(triple.first().ok_or_else(invalid_echo)?, index)?;
++        Ok((token.to_string(), score))
++    }).collect()
+ }
+ 
+-fn parse_echo_choice(choice: &Value) -> Vec<(String, f64)> {
+-    let logprobs = match choice.get("logprobs") {
+-        Some(logprobs) => logprobs,
+-        None => return Vec::new(),
+-    };
+-    match (
+-        logprobs.get("tokens").and_then(|t| t.as_array()),
+-        logprobs.get("token_logprobs").and_then(|t| t.as_array()),
+-    ) {
+-        (Some(tokens), Some(token_logprobs)) => tokens
+-            .iter()
+-            .zip(token_logprobs.iter())
+-            .filter_map(|(token, logprob)| {
+-                Some((token.as_str()?.to_string(), logprob.as_f64()?))
+-            })
+-            .collect(),
+-        _ => Vec::new(),
++fn parse_echo_choice(choice: &Value) -> Result<PromptLogprobs, EngineError> {
++    let logprobs = choice.get("logprobs").ok_or_else(invalid_echo)?;
++    let tokens = logprobs.get("tokens").and_then(Value::as_array).ok_or_else(invalid_echo)?;
++    let scores = logprobs.get("token_logprobs").and_then(Value::as_array).ok_or_else(invalid_echo)?;
++    if tokens.is_empty() || tokens.len() != scores.len() {
++        return Err(invalid_echo());
++    }
++    tokens.iter().zip(scores).enumerate().map(|(index, (token, score))| {
++        let token = token.as_str().ok_or_else(invalid_echo)?;
++        Ok((token.to_string(), prompt_score(score, index)?))
++    }).collect()
++}
++
++fn parse_echo_choices(payload: &Value, count: usize) -> Result<Vec<PromptLogprobs>, EngineError> {
++    let choices = payload.get("choices").and_then(Value::as_array).ok_or_else(invalid_echo)?;
++    if choices.len() != count {
++        return Err(EngineError::Other(format!(
++            "echo response has {} choices, expected {count}", choices.len()
++        )));
++    }
++    if choices.iter().any(|choice| choice.get("index").is_some())
++        && choices.iter().enumerate().any(|(index, choice)| {
++            choice.get("index").and_then(Value::as_u64) != Some(index as u64)
++        })
++    {
++        return Err(EngineError::Other("echo response choice indices are misaligned".to_string()));
+     }
++    choices.iter().map(parse_echo_choice).collect()
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    // Synthetic loopback engine only: real HTTP adapters/parsers, no inference.
++    async fn fixture_engine(kind: EngineKind, payload: Value) -> (Arc<dyn Engine>, tokio::task::JoinHandle<()>) {
++        use hyper::service::service_fn;
++        use hyper_util::rt::TokioIo;
++        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let url = format!("http://{}", listener.local_addr().unwrap());
++        let server = tokio::spawn(async move {
++            let (stream, _) = listener.accept().await.unwrap();
++            let service = service_fn(move |request: hyper::Request<hyper::body::Incoming>| {
++                let payload = payload.clone();
++                async move {
++                    use http_body_util::BodyExt;
++                    request.into_body().collect().await.unwrap();
++                    Ok::<_, std::convert::Infallible>(crate::json_response(200, payload))
++                }
++            });
++            hyper::server::conn::http1::Builder::new()
++                .keep_alive(false)
++                .serve_connection(TokioIo::new(stream), service)
++                .await
++                .unwrap();
++        });
++        let client = reqwest::Client::builder().no_proxy()
++            .timeout(std::time::Duration::from_secs(2)).build().unwrap();
++        (build(kind, client, url, "test".to_string(), "system".to_string(), false), server)
++    }
++
++    #[tokio::test]
++    async fn echo_adapters_refuse_malformed_or_misaligned_scores() {
++        let choices = [
++            json!({"logprobs": {"tokens": ["ctx", "x", "suffix"], "token_logprobs": [null, -1.0, "bad"]}}),
++            json!({"logprobs": {"tokens": ["ctx", "x", "suffix"], "token_logprobs": [null, -1.0]}}),
++            json!({"logprobs": {"tokens": ["ctx", "x", "suffix"], "token_logprobs": [null, -1.0, null]}}),
++            json!({"logprobs": {"tokens": ["ctx", false, "suffix"], "token_logprobs": [null, -1.0, -2.0]}}),
++            json!({}),
++            json!({"logprobs": null}),
++            json!({"logprobs": {"tokens": ["ctx", "x"]}}),
++            json!({"logprobs": {"token_logprobs": [null, -1.0]}}),
++            json!({"logprobs": {"tokens": [], "token_logprobs": []}}),
++            json!({"logprobs": {"tokens": ["ctx"], "token_logprobs": []}}),
++        ];
++        for kind in [EngineKind::Vllm, EngineKind::OpenAi] {
++            for choice in &choices {
++                let (engine, server) = fixture_engine(kind, json!({"choices": [choice]})).await;
++                let result = engine.prompt_logprobs("ctx").await;
++                server.await.unwrap();
++                assert!(matches!(result, Err(EngineError::Other(_))), "{kind:?} accepted {choice}: {result:?}");
++            }
++        }
++        for items in [json!([[null, 1, "ctx"], [-1.0, 2, "x"], ["bad", 3, "suffix"]]),
++            json!([[null, 1, "ctx"], [null, 2, "x"]]), json!([])] {
++            let (engine, server) = fixture_engine(EngineKind::Sglang, json!({"meta_info": {"input_token_logprobs": items}})).await;
++            let result = engine.prompt_logprobs("ctx").await;
++            server.await.unwrap();
++            assert!(matches!(result, Err(EngineError::Other(_))), "SGLang accepted {items}: {result:?}");
++        }
++    }
++
++    #[tokio::test]
++    async fn echo_adapters_preserve_initial_unscored_token_alignment() {
++        for (kind, payload) in [
++            (EngineKind::Vllm, json!({"choices": [{"logprobs": {"tokens": ["ctx", "x"], "token_logprobs": [null, -1.0]}}]})),
++            (EngineKind::OpenAi, json!({"choices": [{"logprobs": {"tokens": ["ctx", "x"], "token_logprobs": [null, -1.0]}}]})),
++            (EngineKind::Sglang, json!({"meta_info": {"input_token_logprobs": [[null, 1, "ctx"], [-1.0, 2, "x"]]}})),
++        ] {
++            let (engine, server) = fixture_engine(kind, payload).await;
++            let result = engine.prompt_logprobs("ctxx").await.unwrap();
++            server.await.unwrap();
++            let tokens: Vec<&str> = result.iter().map(|(token, _)| token.as_str()).collect();
++            assert_eq!(tokens, vec!["ctx", "x"], "{kind:?} dropped unscored token");
++            assert_eq!(result[0].1, None);
++            assert_eq!(result[1].1, Some(-1.0));
++        }
++    }
++
++    #[tokio::test]
++    async fn vllm_echo_refuses_wrong_response_cardinality() {
++        let choice = json!({"logprobs": {"tokens": ["ctx", "x"], "token_logprobs": [null, -1.0]}});
++        for count in [0, 1, 3] {
++            let (engine, server) = fixture_engine(EngineKind::Vllm, json!({"choices": vec![choice.clone(); count]})).await;
++            let result = engine.prompt_logprobs_batch(&["a".to_string(), "b".to_string()]).await;
++            server.await.unwrap();
++            assert!(matches!(result, Err(EngineError::Other(_))), "accepted {count} batch choices: {result:?}");
++        }
++        for kind in [EngineKind::Vllm, EngineKind::OpenAi] {
++            let (engine, server) = fixture_engine(kind, json!({"choices": [choice.clone(), choice.clone()]})).await;
++            let result = engine.prompt_logprobs("ctxx").await;
++            server.await.unwrap();
++            assert!(matches!(result, Err(EngineError::Other(_))), "{kind:?} accepted multiple context choices: {result:?}");
++        }
++    }
++
++    #[tokio::test]
++    async fn vllm_echo_refuses_misaligned_choice_indices() {
++        for indices in [json!([1, 0]), json!([0, 0]), json!([0, 2]), json!([0, -1]), json!([0, "1"]), json!([0, null])] {
++            let choices: Vec<Value> = indices.as_array().unwrap().iter().map(|index| {
++                let mut choice = json!({"logprobs": {"tokens": ["ctx", "x"], "token_logprobs": [null, -1.0]}});
++                if !index.is_null() { choice["index"] = index.clone(); }
++                choice
++            }).collect();
++            let (engine, server) = fixture_engine(EngineKind::Vllm, json!({"choices": choices})).await;
++            let result = engine.prompt_logprobs_batch(&["a".to_string(), "b".to_string()]).await;
++            server.await.unwrap();
++            assert!(matches!(result, Err(EngineError::Other(_))), "accepted misaligned indices {indices}: {result:?}");
++        }
++    }
++
+     #[test]
+     fn vllm_exact_id_response() {
+         let payload = json!({
+@@ -917,8 +1034,8 @@ mod tests {
+             }
+         });
+         assert_eq!(
+-            parse_echo_choice(&choice),
+-            vec![("a".to_string(), -0.1), ("b".to_string(), -0.2)]
++            parse_echo_choice(&choice).unwrap(),
++            vec![("a".to_string(), Some(-0.1)), ("b".to_string(), Some(-0.2))]
+         );
+     }
+ 
+diff --git a/sidecar-rs/src/main.rs b/sidecar-rs/src/main.rs
+index 6a0e649..1597638 100644
+--- a/sidecar-rs/src/main.rs
++++ b/sidecar-rs/src/main.rs
+@@ -540,14 +540,33 @@ async fn echo_scores(ctx: &Ctx, context: &str, keys: &[String]) -> Result<(Vec<f
+         ));
+     }
+     let context_pairs = ctx.engine.prompt_logprobs(context).await?;
++    let usable = |pairs: &engine::PromptLogprobs| {
++        !pairs.is_empty() && pairs.iter().enumerate().all(|(index, (_, score))| {
++            match score {
++                Some(score) => score.is_finite(),
++                None => index == 0,
++            }
++        })
++    };
++    if !usable(&context_pairs) {
++        return Err(EngineError::Other("echo response has unusable context scores".to_string()));
++    }
+     let ctx_tokens: Vec<String> = context_pairs.into_iter().map(|(token, _)| token).collect();
+     let mut scores = Vec::new();
+     let mut usage_tokens = 0i64;
+     for chunk in keys.chunks(ctx.batch) {
+         let prompts: Vec<String> = chunk.iter().map(|k| format!("{context}{k}")).collect();
+         let batch = ctx.engine.prompt_logprobs_batch(&prompts).await?;
++        if batch.len() != chunk.len() {
++            return Err(EngineError::Other(format!(
++                "echo response has {} scores, expected {}", batch.len(), chunk.len()
++            )));
++        }
+         usage_tokens = ctx.engine.last_usage();
+         for pairs in batch {
++            if !usable(&pairs) {
++                return Err(EngineError::Other("echo response has unusable token scores".to_string()));
++            }
+             let tokens: Vec<String> = pairs.iter().map(|(token, _)| token.clone()).collect();
+             let mut shared = 0;
+             while shared < ctx_tokens.len()
+@@ -557,7 +576,16 @@ async fn echo_scores(ctx: &Ctx, context: &str, keys: &[String]) -> Result<(Vec<f
+                 shared += 1;
+             }
+             let start = shared.min(pairs.len());
+-            scores.push(pairs[start..].iter().map(|(_, logprob)| logprob).sum());
++            if start == pairs.len() {
++                return Err(EngineError::Other("echo response has no continuation scores".to_string()));
++            }
++            let score: f64 = pairs[start..].iter().map(|(_, score)| {
++                score.ok_or_else(|| EngineError::Other("echo continuation has an unscored token".to_string()))
++            }).sum::<Result<_, _>>()?;
++            if !score.is_finite() {
++                return Err(EngineError::Other("echo continuation score is non-finite".to_string()));
++            }
++            scores.push(score);
+         }
+     }
+     Ok((scores, usage_tokens))
+@@ -586,6 +614,8 @@ fn require_template(ctx: &Ctx) -> Result<(), EngineError> {
+ }
+ 
+ async fn probe(ctx: &Ctx) -> Result<Mode, EngineError> {
++    let _permit = ctx.sem.acquire().await
++        .map_err(|e| EngineError::Other(format!("worker admission failed: {e}")))?;
+     let probe_question = json!({
+         "type": "choice",
+         "instructions": "Which colour is named?",
+@@ -614,7 +644,8 @@ async fn probe(ctx: &Ctx) -> Result<Mode, EngineError> {
+ }
+ 
+ async fn ensure_mode(ctx: &Ctx) -> Result<Mode, EngineError> {
+-    if let Some(mode) = *ctx.mode.lock().await {
++    let mut current = ctx.mode.lock().await;
++    if let Some(mode) = *current {
+         return Ok(mode);
+     }
+     let mode = match ctx.spec.readout.as_str() {
+@@ -626,17 +657,52 @@ async fn ensure_mode(ctx: &Ctx) -> Result<Mode, EngineError> {
+         "auto" => probe(ctx).await?,
+         other => return Err(EngineError::Unsupported(format!("unknown readout {other:?}"))),
+     };
+-    *ctx.mode.lock().await = Some(mode);
++    *current = Some(mode);
+     Ok(mode)
+ }
+ 
++fn validate_question_input(key: &str, question: &Value) -> Result<(), EngineError> {
++    if !question.is_object() || question.get("instructions").and_then(Value::as_str).is_none() {
++        return Err(EngineError::Unsupported(format!(
++            "{key}: question requires string instructions"
++        )));
++    }
++    match question.get("type").and_then(Value::as_str) {
++        Some("choice") => {
++            let criteria = question.get("criteria").and_then(Value::as_object).ok_or_else(|| {
++                EngineError::Unsupported(format!("{key}: choice requires a criteria object"))
++            })?;
++            if !(2..=255).contains(&criteria.len()) {
++                return Err(EngineError::Unsupported(format!(
++                    "{key}: a choice takes 2 to 255 options"
++                )));
++            }
++            if criteria.values().any(|value| !value.is_null() && !value.is_string()) {
++                return Err(EngineError::Unsupported(format!(
++                    "{key}: criteria descriptions must be strings or null"
++                )));
++            }
++        }
++        Some("noul") => {}
++        other => {
++            return Err(EngineError::Unsupported(format!(
++                "{key}: unsupported question type {other:?}"
++            )));
++        }
++    }
++    Ok(())
++}
++
+ async fn score_question(
+     ctx: Arc<Ctx>,
+     state: Value,
+     key: String,
+     question: Value,
+ ) -> Result<(String, Value, i64), EngineError> {
++    validate_question_input(&key, &question)?;
+     let mode = ensure_mode(&ctx).await?;
++    let _permit = ctx.sem.acquire().await
++        .map_err(|e| EngineError::Other(format!("worker admission failed: {e}")))?;
+     let qtype = question
+         .get("type")
+         .and_then(|t| t.as_str())
+@@ -770,6 +836,12 @@ async fn readout_call(
+     state: &Value,
+     questions: &Map<String, Value>,
+ ) -> Result<Value, EngineError> {
++    if questions.is_empty() {
++        return Err(EngineError::Unsupported("questions must be non-empty".to_string()));
++    }
++    for (key, question) in questions {
++        validate_question_input(key, question)?;
++    }
+     let mode = ensure_mode(&ctx).await?;
+     let key = cache_key(&ctx, mode, state, questions);
+     if let Some(hit) = ctx.cache.lock().unwrap().get(&key) {
+@@ -789,26 +861,33 @@ async fn readout_call(
+             input_tokens += tokens;
+         }
+     } else {
+-        let mut handles = Vec::new();
++        let mut handles = tokio::task::JoinSet::new();
+         for (question_key, question) in items {
+             let ctx = ctx.clone();
+             let state = state.clone();
+-            handles.push(tokio::spawn(async move {
+-                let _permit = ctx.sem.acquire().await;
++            handles.spawn(async move {
+                 score_question(ctx.clone(), state, question_key, question).await
+-            }));
++            });
+         }
+-        for handle in handles {
+-            match handle.await {
++        while let Some(result) = handles.join_next().await {
++            let error = match result {
+                 Ok(Ok((question_key, answer, tokens))) => {
+                     answers.insert(question_key, answer);
+                     input_tokens += tokens;
++                    continue;
+                 }
+-                Ok(Err(error)) => return Err(error),
+-                Err(e) => return Err(EngineError::Other(format!("readout task failed: {e}"))),
+-            }
++                Ok(Err(error)) => error,
++                Err(e) => EngineError::Other(format!("readout task failed: {e}")),
++            };
++            handles.abort_all();
++            while handles.join_next().await.is_some() {}
++            return Err(error);
+         }
+     }
++    // Preserve stored answer order even when concurrent questions finish out of order.
++    let answers: Map<String, Value> = questions.keys().filter_map(|key| {
++        answers.remove(key).map(|answer| (key.clone(), answer))
++    }).collect();
+     let response = json!({
+         "model": ctx.model,
+         "answers": answers,
+@@ -1080,8 +1159,8 @@ async fn main() {
+         })
+         .or(Some(spec.temperature))
+         .unwrap_or(1.0);
+-    if temperature <= 0.0 {
+-        panic!("temperature must be > 0");
++    if !temperature.is_finite() || temperature <= 0.0 {
++        panic!("temperature must be finite and > 0");
+     }
+ 
+     let client = reqwest::Client::builder()
+diff --git a/sidecar-rs/src/mcp.rs b/sidecar-rs/src/mcp.rs
+index f14c0f3..d1cbe7d 100644
+--- a/sidecar-rs/src/mcp.rs
++++ b/sidecar-rs/src/mcp.rs
+@@ -165,3 +165,45 @@ pub async fn serve(ctx: Arc<Ctx>) {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::tests_readout::{make_ctx, malformed_questions, MockEngine};
++    use crate::ModelSpec;
++
++    #[tokio::test]
++    async fn malformed_decide_tool_questions_refuse_without_engine_access() {
++        let (ctx, engine) = make_ctx(MockEngine::exact(&[]), ModelSpec::default());
++        for question in malformed_questions() {
++            let message = json!({"params": {"name": "decide", "arguments": {
++                "state": null, "questions": {"q": question}
++            }}});
++            let response = call_tool(&ctx, &json!(1), &message).await;
++            assert_eq!(response["result"]["isError"], true, "{response}");
++            let error: Value = serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
++            assert_eq!(error["error"]["status"], 422);
++            assert_eq!(engine.request_count(), 0);
++        }
++        let message = json!({"params": {"name": "decide", "arguments": {
++            "state": null, "questions": {}
++        }}});
++        let response = call_tool(&ctx, &json!(1), &message).await;
++        assert_eq!(response["error"]["code"], -32602);
++        assert_eq!(engine.request_count(), 0);
++    }
++
++    #[tokio::test]
++    async fn valid_decide_tool_retains_structured_response() {
++        let spec = ModelSpec { readout: "lettered".to_string(), specific_token_scores: true, ..Default::default() };
++        let (ctx, _) = make_ctx(MockEngine::exact(&[(97, -0.5), (98, -1.0)]), spec);
++        let questions = json!({
++            "choice": {"type": "choice", "instructions": "", "criteria": {"a": null, "b": "B"}},
++            "binary": {"type": "noul", "instructions": ""}
++        });
++        let message = json!({"params": {"name": "decide", "arguments": {"state": null, "questions": questions}}});
++        let response = call_tool(&ctx, &json!(1), &message).await;
++        assert_eq!(response["result"]["isError"], false);
++        crate::validate(questions.as_object().unwrap(), &response["result"]["structuredContent"]).unwrap();
++    }
++}

@@ -1,0 +1,222 @@
+"""Q-PQNLD-4 RUN launcher; Q-PQNLD-5 preserves present JSON question values."""
+import collections
+import gzip
+import hashlib
+import importlib.metadata
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
+if sys.flags.optimize:
+    raise RuntimeError('Python optimization must be disabled for safety assertions')
+
+W = Path('/work')
+RUNTIME = W / 'pqnld-quality-run-20261002'
+OUT = W / 'runs/http-repaired-sample100-20261002'
+MODEL = 'qwen38-27b-nvfp4'
+ENGINE = 'http://100.77.14.27:11542'
+PORT = 11574
+BIN = Path(sys.argv[1]).resolve()
+BINARY_SHA, SOURCE_SHA = sys.argv[2:4]
+assert len(sys.argv) == 4 and all(re.fullmatch('[0-9a-f]{64}', x) for x in (BINARY_SHA, SOURCE_SHA))
+assert BIN.is_relative_to(W / 'pqnld-reliability-20261002') and BIN.is_file()
+assert BIN.name == 'pqnld-rs-release' and BIN.parent.name == SOURCE_SHA
+os.umask(0o077)
+
+def sha(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+def listening():
+    return any(int(f[1].split(':')[1], 16) == PORT and f[3] == '0A'
+               for p in ('/proc/net/tcp', '/proc/net/tcp6')
+               for f in (line.split() for line in Path(p).read_text().splitlines()[1:]))
+
+def listener_owned_by(pid):
+    sockets = set()
+    for fd in Path(f'/proc/{pid}/fd').iterdir():
+        try:
+            sockets.add(os.readlink(fd))
+        except FileNotFoundError:
+            pass  # A transient accepted HTTP socket may close during inspection.
+    return any(f[1] == f'0100007F:{PORT:04X}' and f[3] == '0A' and f'socket:[{f[9]}]' in sockets
+               for f in (line.split() for line in Path('/proc/net/tcp').read_text().splitlines()[1:]))
+
+deadline = None
+health = {'before_status': None, 'after_status': None, 'successful_gets': 0, 'failed_gets': 0, 'last_failure_status': None}
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+def get(url):
+    budget = min(5, deadline - time.monotonic()) if deadline is not None else 5
+    assert budget > 0, 'attempt_deadline'
+    try:
+        with opener.open(url, timeout=budget) as response:
+            assert response.status == 200
+            body = response.read()
+            if url == ENGINE + '/health':
+                health['successful_gets'] += 1
+                if health['before_status'] is None:
+                    health['before_status'] = response.status
+            return body
+    except Exception as exc:
+        if url == ENGINE + '/health':
+            health['failed_gets'] += 1
+            health['last_failure_status'] = getattr(exc, 'code', None)
+        raise
+
+assert sha(BIN) == BINARY_SHA
+assert sha(BIN.parent / 'source.tar') == SOURCE_SHA
+assert sha(W / 'sample-100.jsonl.gz') == '640b3af5bc8854ef349eb8645723361c861e9d2201e005074b24955b38d2be4d'
+assert sha(W / 'suite/manifest.json') == 'ff77c78ff4f48835db51b061b006b345d679e1530ba1261a3a4ceb792a89638d'
+assert sha(W / 'desc/qwen38-27b-nvfp4.json') == '6325676e7e554b7564ea23ee5567d9928c7ac8ce1b7b548fa95e85f2a795e38f'
+assert subprocess.check_output(['git', '-C', '/work/kit', 'rev-parse', 'HEAD'], text=True).strip() == '87d4650b42b377c0291a89c1f1a879f9b31082bf'
+assert not subprocess.check_output(['git', '-C', '/work/kit', 'status', '--porcelain'], text=True).strip()
+assert importlib.metadata.version('decision-index') == '0.2.1'
+assert sha(W / 'suite/selected-rows.jsonl.gz') == 'eb2f1927658f6cb28d46950a6f655efd3562600e92395f651be196f247f466c4'
+assert sha(W / 'suite/added-rows.jsonl.gz') == 'e0d18104c835dd62d3e93342156eb7cd584b0919efc15d4e51c61961b9e3e048'
+assert sha(W / 'suite/excluded-questions.json') == '331df32d4b719c7db43214d0e5d85859d39c3b2eb7d0b3812214cce150155e81'
+shape_counts = collections.Counter()
+with gzip.open(W / 'sample-100.jsonl.gz', 'rt') as sample:
+    for line in sample:
+        row = json.loads(line)
+        shape_counts['requests'] += 1
+        assert isinstance(row.get('questions'), dict) and row['questions']
+        for question in row['questions'].values():
+            shape_counts['questions'] += 1
+            assert isinstance(question, dict) and 'instructions' in question
+            assert isinstance(question.get('type'), str) and question['type'] in ('choice', 'noul')
+            shape_counts[question['type']] += 1
+            if question['type'] == 'choice':
+                assert isinstance(question.get('criteria'), dict) and 2 <= len(question['criteria']) <= 255
+assert shape_counts['requests'] == 100 and shape_counts['questions'] == 760
+assert not listening() and not os.path.lexists(RUNTIME) and not os.path.lexists(OUT)
+get(ENGINE + '/health')
+models_raw = get(ENGINE + '/v1/models')
+models = json.loads(models_raw)['data']
+assert [m['id'] for m in models] == [MODEL] and models[0]['owned_by'] == 'vllm'
+RUNTIME.mkdir(mode=0o700)
+OUT.mkdir(mode=0o700)
+(RUNTIME / 'desc').mkdir(mode=0o700)
+descriptor = json.loads((W / 'desc/qwen38-27b-nvfp4.json').read_text())
+descriptor.update(readout='lettered', specific_token_scores=True)
+descriptor_path = RUNTIME / 'desc/qwen38-27b-nvfp4.json'
+descriptor_path.write_text(json.dumps(descriptor, sort_keys=True, indent=2) + '\n')
+assert sha(descriptor_path) == '2a9f6df5b4ac8c9600f67f8cf28232e54137e84d731981e9c17135045ea44aa5'
+env = os.environ.copy()
+for key in ('DECISION_INDEX_API_KEY', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'):
+    env.pop(key, None)
+env.update(HF_HUB_OFFLINE='1', PYTHONDONTWRITEBYTECODE='1', NO_PROXY='127.0.0.1,localhost,100.77.14.27')
+sidecar_cmd = [str(BIN), '--engine-kind', 'vllm', '--vllm-url', ENGINE, '--model', MODEL, '--descriptor', MODEL, '--models-dir', str(RUNTIME / 'desc'), '--host', '127.0.0.1', '--port', str(PORT), '--workers', '1', '--temperature', '1', '--timeout', '600']
+pipeline_cmd = ['/work/venv/bin/python', '-B', '-m', 'decision_index', 'pipeline', '--engine', 'http', '--option', f'base_url=http://127.0.0.1:{PORT}', '--option', f'model={MODEL}', '--option', 'timeout=600', '--rows', '/work/sample-100.jsonl.gz', '--suite-dir', '/work/suite', '--edition', '0.2.1', '--limit', '100', '--fresh', '--compact', '--out', str(OUT)]
+start = time.monotonic()
+deadline = start + 880  # Reserve up to 20 seconds of the 900-second cap for owned cleanup.
+sidecar = pipeline = None
+def interrupted(signum, frame):
+    raise RuntimeError('owned_launcher_interrupted')
+signal.signal(signal.SIGTERM, interrupted)
+signal.signal(signal.SIGINT, interrupted)
+receipt = {'source_snapshot_sha256_from_green_handoff': SOURCE_SHA, 'binary_sha256': BINARY_SHA, 'binary_path': str(BIN), 'descriptor_sha256': sha(descriptor_path), 'model_id': MODEL, 'models_response_sha256': hashlib.sha256(models_raw).hexdigest(), 'checkpoint_content_sha256': None, 'kit_commit': '87d4650b42b377c0291a89c1f1a879f9b31082bf', 'python': sys.version.split()[0], 'decision_index': importlib.metadata.version('decision-index'), 'pipeline_attempts': 0, 'built_in_warmup_requests': 2, 'workers': 1, 'output': str(OUT), 'stop_reason': None}
+receipt.update(source_archive_sha256_verified=sha(BIN.parent / 'source.tar'), sample_contract_counts=dict(shape_counts), sample_contract_invalid_requests=0, contract='Q-PQNLD-5 Preserve JSON', transformations_or_dropped_rows=0, sidecar_command=sidecar_cmd, pipeline_command=pipeline_cmd)
+try:
+    with (RUNTIME / 'sidecar.log').open('x') as sidecar_log, (RUNTIME / 'pipeline.log').open('x') as pipeline_log:
+        sidecar = subprocess.Popen(sidecar_cmd, env=env, stdout=sidecar_log, stderr=subprocess.STDOUT)
+        receipt['sidecar_pid'] = sidecar.pid
+        ready_deadline = min(deadline, time.monotonic() + 30)
+        while True:
+            assert sidecar.poll() is None, 'sidecar_exited_before_ready'
+            assert time.monotonic() < ready_deadline, 'sidecar_readiness_timeout'
+            get(ENGINE + '/health')
+            try:
+                get(f'http://127.0.0.1:{PORT}/healthz')
+                if listener_owned_by(sidecar.pid):
+                    assert sha(f'/proc/{sidecar.pid}/exe') == BINARY_SHA, 'running_binary_hash_mismatch'
+                    receipt.update(running_binary_sha256=sha(f'/proc/{sidecar.pid}/exe'), loopback_listener_owned_by_sidecar=True)
+                    break
+                time.sleep(0.2)
+            except urllib.error.URLError:
+                time.sleep(0.2)
+        assert time.monotonic() < deadline, 'attempt_deadline'
+        pipeline = subprocess.Popen(pipeline_cmd, env=env, stdout=pipeline_log, stderr=subprocess.STDOUT)
+        pipeline_start = time.monotonic()
+        receipt.update(pipeline_pid=pipeline.pid, pipeline_attempts=1)
+        while pipeline.poll() is None:
+            assert time.monotonic() < deadline, 'attempt_deadline'
+            assert sidecar.poll() is None, 'sidecar_exited_during_pipeline'
+            get(ENGINE + '/health')
+            time.sleep(min(5, max(0, deadline - time.monotonic())))
+        assert pipeline.returncode == 0, 'pipeline_nonzero'
+        receipt['pipeline_observed_elapsed_seconds'] = round(time.monotonic() - pipeline_start, 3)
+        get(ENGINE + '/health')
+        health['after_status'] = 200
+        after_models = get(ENGINE + '/v1/models')
+        assert [m['id'] for m in json.loads(after_models)['data']] == [MODEL], 'model_identity_changed'
+        receipt['models_response_sha256_after'] = hashlib.sha256(after_models).hexdigest()
+except BaseException as exc:
+    receipt['stop_reason'] = str(exc) if isinstance(exc, AssertionError) else type(exc).__name__
+finally:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    # Signal only these Popen children, never existing engine processes or groups.
+    for child in (pipeline, sidecar):
+        if child is not None and child.poll() is None:
+            child.terminate()
+    for name, child in (('pipeline', pipeline), ('sidecar', sidecar)):
+        if child is not None:
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait(timeout=5)
+            receipt[name + '_returncode'] = child.returncode
+            receipt[name + '_reaped'] = True
+    if pipeline is not None and 'pipeline_start' in locals():
+        receipt.setdefault('pipeline_observed_elapsed_seconds', round(time.monotonic() - pipeline_start, 3))
+    deadline = None  # Request generation is stopped; this is read-only health readback.
+    try:
+        get(ENGINE + '/health')
+        health['after_cleanup_status'] = 200
+    except Exception as exc:
+        receipt['stop_reason'] = receipt['stop_reason'] or 'engine_health_failed_after_cleanup'
+        health['after_cleanup_error_type'] = type(exc).__name__
+    receipt.update(elapsed_seconds=round(time.monotonic() - start, 3), port_listening_after_cleanup=listening())
+    receipt['engine_health'] = health
+    if receipt['port_listening_after_cleanup']:
+        receipt['stop_reason'] = receipt['stop_reason'] or 'port_still_listening_do_not_kill_unowned_process'
+    receipt['binary_file_sha256_after'] = sha(BIN)
+    receipt['input_sha256'] = {str(p.relative_to(W)): sha(p) for p in (W / 'sample-100.jsonl.gz', W / 'suite/manifest.json', W / 'suite/selected-rows.jsonl.gz', W / 'suite/added-rows.jsonl.gz', W / 'suite/excluded-questions.json', W / 'desc/qwen38-27b-nvfp4.json')}
+    receipt['scorer_sha256'] = {str(p.relative_to(W / 'kit')): sha(p) for p in (W / 'kit/decision_index/cli.py', W / 'kit/decision_index/pipeline.py', W / 'kit/decision_index/runner.py', W / 'kit/decision_index/engines/http.py', W / 'kit/decision_index/engines/base.py')}
+    receipt['output_sha256'] = {p.name: sha(p) for p in OUT.iterdir() if p.is_file()}
+    if (OUT / 'status.json').exists():
+        status = json.loads((OUT / 'status.json').read_text())
+        receipt['official_run_status'] = {k: status[k] for k in ('time', 'event', 'completed', 'counts', 'elapsed_seconds') if k in status}
+    if (OUT / 'scores.json').exists():
+        scores = json.loads((OUT / 'scores.json').read_text())
+        receipt['official'] = {k: scores[k] for k in ('edition', 'completed', 'complete', 'counts', 'decision_index', 'raw_index', 'scores')}
+        receipt['successful_request_latency_ms'] = scores['latency_ms']
+        receipt['successful_request_latency_denominator'] = scores['counts'].get('ok', 0)
+        index = json.loads((OUT / 'index.json').read_text())
+        receipt.update(weighted_index_coverage=index['coverage'], area_metrics=index['areas'])
+        benchmark_summary = json.loads((OUT / 'benchmark-summary.json').read_text())
+        allowed = ('catalog_id', 'dataset', 'requests', 'answered', 'scored_requests', 'unsupported', 'errors', 'abstained', 'pending', 'metric', 'score')
+        scalar_detail = ('field_accuracy', 'case_exact_accuracy', 'macro_f1', 'cluster_macro_accuracy', 'positive_micro_f1', 'scored_fields', 'chance_on_rows')
+        receipt['native_metrics'] = [{**{k: b[k] for k in allowed if k in b}, 'detail': {k: b.get('detail', {})[k] for k in scalar_detail if k in b.get('detail', {})}, 'custom_metrics': b.get('detail', {}).get('custom_metrics', {}), 'tracks': b.get('tracks')} for b in benchmark_summary['benchmarks'] if b['answered']]
+    sample_ids = {json.loads(line)['_evaluation']['run_id'] for line in gzip.open(W / 'sample-100.jsonl.gz', 'rt') if line.strip()}
+    receipt['sample_content_sha256'] = hashlib.sha256(gzip.decompress((W / 'sample-100.jsonl.gz').read_bytes())).hexdigest()
+    rows = [json.loads(line) for line in (OUT / 'results.jsonl').open() if line.strip()] if (OUT / 'results.jsonl').exists() else []
+    result_ids = {r['run_id'] for r in rows}
+    receipt.update(result_rows=len(rows), result_status_counts=dict(collections.Counter(r['status'] for r in rows)), overlap_with_original_sample=len(result_ids & sample_ids), results_outside_sample=len(result_ids - sample_ids), result_duplicate_run_ids=len(rows) - len(result_ids))
+    sample_status = collections.defaultdict(collections.Counter)
+    for r in rows:
+        sample_status[str(r['catalog_id'])][r['status']] += 1
+    receipt['sample_status_by_catalog_id'] = dict(sample_status)
+    if receipt['binary_file_sha256_after'] != BINARY_SHA or receipt['input_sha256']['desc/qwen38-27b-nvfp4.json'] != '6325676e7e554b7564ea23ee5567d9928c7ac8ce1b7b548fa95e85f2a795e38f':
+        receipt['stop_reason'] = receipt['stop_reason'] or 'post_run_artifact_changed'
+    (RUNTIME / 'receipt-summary.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
+    print(json.dumps(receipt, sort_keys=True))
+if receipt['stop_reason'] or receipt.get('pipeline_returncode') != 0:
+    raise SystemExit(1)

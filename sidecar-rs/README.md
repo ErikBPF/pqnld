@@ -42,19 +42,27 @@ pqnld-rs --vllm-url http://127.0.0.1:11542 \
 | `--host` / `--port` | `PQNLD_HOST` / `PQNLD_PORT` | `127.0.0.1` / `11560` | TCP listener |
 | `--uds` | — | off | Also listen on a Unix domain socket |
 | `--mcp` | — | off | Serve the `decide` tool on MCP stdio instead of HTTP |
-| `--workers` | — | `1` | Concurrent questions per request |
+| `--workers` | — | `1` | Global budget for active sidecar question scoring and probes |
 | `--temperature` | `PQNLD_TEMPERATURE` (`DECISION_TEMPERATURE`) | descriptor / `1.0` | Softmax temperature |
 | `--timeout` | — | `600` | Engine request timeout (s) |
 
+**UDS safety limit:** existing startup code removes the supplied UDS path without
+checking that it is a socket. Do not point `--uds` at a pre-existing regular file
+or other non-socket path. This repair's verification uses TCP; UDS path protection
+remains a separate follow-up.
+
 ## Determinism
 
-Decisions are **sequential by default** (`--workers 1`): one engine request is
-in flight per question, so repeated runs are byte-identical. Raising `--workers`
-batches questions and is faster on multi-question rows, but the engine's batched
-decode is not numerically identical to single-stream decode — identical prompts
-can return different answer-slot logits depending on batch slot/position, and
-MTP speculative decoding adds run-to-run variation. Use `--workers > 1` only when
-reproducibility is not required.
+Question scoring and initial readout probes share a **global sidecar budget**
+(`--workers 1` by default). Each request retains stored question order at one
+worker; raising the budget permits concurrency. Failed concurrent decisions
+cancel and drain their remaining local tasks, reclaiming worker permits.
+
+This is not engine-wide determinism: ordinary chat sent directly to the model
+is outside the budget, and cancellation cannot unsend an upstream request already
+accepted. Batch numerics, MTP, engine restarts and result caching affect what
+repeatability observations mean. Two isolated historical sample runs had identical
+answers, not a guarantee that future runs are byte-identical.
 
 ### MCP
 
@@ -71,6 +79,8 @@ for opencode/Codex config.
 `models/<name>.json`: `readout` (`lettered`|`echo`|
 `auto`), `letters`, `temperature`, `enable_thinking`, `system_prompt`,
 `letter_system_prompt`, `chat_template`, `engine_profile`,
-`specific_token_scores`. Set `specific_token_scores: true` to score
-explicit token ids (required for questions with more than 26 options, where the
-shared prompt is split across `ceil(n/128)` requests and merged).
+`specific_token_scores`. Set `specific_token_scores: true` with a compatible
+adapter to enable explicit-ID scoring and an extended single-token alphabet.
+Above the tested 128-ID cap, the same prompt is split across `ceil(n/128)` requests
+and scores are merged. Without this opt-in, questions exceeding the configured
+alphabet use echo instead; tokenizer and backend capacity still apply.

@@ -1,0 +1,178 @@
+Apollo final artifact-boundary recheck, 2026-10-02T17:32:03Z
+Outcome: native full-package whitespace checks PASS, not a blanket full-gate pass.
+One bounded follow-up after the genuine historical-evidence formatting finding.
+New staged package: app 86 files, audit ten; every staged blob matches index.
+All 50 raw logs plus frozen first-draft-production.patch have identical prior
+staged blob IDs AND bytes. No trimming, normalization, regeneration or loss.
+Root .gitattributes is exactly three approved lines: comment plus artifact-only
+docs/reliability-evidence/*.log -whitespace and frozen patch -whitespace.
+
+Apollo owned attrs-final/ snapshot; marker pqnld-docs-review-20261002-7314 verified.
+Reconstructed safe baseline + exact staged patch in private scratch Git repos:
+git init -q --template=; git add -A -f .; git apply --check --whitespace=nowarn PATCH;
+git apply --whitespace=nowarn PATCH; git add -N -f .; git diff --check.
+Private diff path lists match all 86/ten staged paths exactly. No fixture commits.
+Native git diff --check: app exit 0/zero diagnostics; audit exit 0/zero diagnostics.
+git check-attr whitespace -- sidecar-rs/src/main.rs README.md docs/behaviors/reliability.feature docs/reliability-evidence/r1-red.log docs/reliability-evidence/first-draft-production.patch
+Results: .rs/README/.feature unspecified; log/frozen patch unset. .gitignore and
+apollo-test.sh also unspecified. Standard source/docs/scripts/config checks remain.
+Negative control: hide ONLY scratch attributes; native check exit 2, restores all
+64 historical warnings. Restore attributes. Positive controls append trailing
+spaces separately to scratch main.rs/README.md: each exits 2 and names that path.
+Restored exact scratch bytes; final native check again exit 0/zero diagnostics.
+
+Owner link checks: all 11 staged app/six audit Markdown exit 0, broken 0;
+all 89/19 relative targets present in staged/base index. Existing target control
+exit 0/broken 0; missing target exit 1/broken 1. Homelab owning docs recipe remains
+exit 1 with exact baseline 14/final 14/new 0/disappeared 0. Full gate not retried.
+Approved canonical source SHA256 866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72
+verified; all nine source payloads unchanged. Seed hash/original byte copy match.
+47 debug/47 release receipts remain unchanged; no Rust/model/build execution.
+Path/NUL checks clean; prior sensitivity limits retained, not exhaustive privacy proof.
+SHA256 under attrs-final/:
+app-staged.patch ef03b266a050b6706f41c1126853e1b0129c0ef1a5a39de8bf4558373f2a9d04
+app-index-blobs.txt 6e4a134d8d9a16da97061e15886fcd2ccffbad7afd2fe683751cc766e8dfa9a6
+app-md-SHA256SUMS 3289f2438537762adc0db71df297a7a568b5a826869a411622ef668a82b3c4cc
+Receipts: app-native-whitespace.log, check-attr.txt, no-attributes-control.log,
+source-whitespace-control.log, markdown-whitespace-control.log, app-restored-native-whitespace.log.
+Only three owned text receipts updated; parent restages before authorized local
+commit/merge. No local validators, branch commits/merges, push/deploy, canonical
+checkout/source/config/hook changes or additional inference by verifier.
+
+Historical unqualified package check below, 2026-10-02T16:51:52Z:
+Its 64 formatting warnings remain preserved data. Current native gate above
+resolves that finding through the explicitly tested artifact-only boundary.
+Outcome: 85 staged app files reconstructed from safe git archive HEAD baseline
+plus git diff --cached --binary; all 85 bytes match git ls-files --stage blob IDs.
+git diff --name-only HEAD captured staged changes too. No reliance on empty
+unstaged diff. Index manifest covers all 110 tracked package paths.
+Remote task: /work/pqnld-docs-review-20261002/premerge-final in dibuild;
+host backing p=/mnt/data/ai/validation/decision-index-2026-10-01/pqnld-docs-review-20261002.
+Existing marker pqnld-docs-review-20261002-7314 verified before task-owned writes.
+
+All 11 changed/new staged Markdown files pass owner-regex checks: exit 0,
+broken 0, grep errors 0. All 89 relative targets exist in staged/base index,
+not merely untracked local disk. Existing staged target control: exit 0/broken 0;
+missing-target control: exit 1/broken 1. Owner homelab docs-check separately
+remains exit 1 on exactly 14 baseline defects; new/disappeared 0.
+Commands: git apply --check --whitespace=nowarn STAGED.patch (exit 0, both repos);
+root="$p/premerge-final/app" scope="$p/premerge-final/app-md-scope-host.txt" bash -euo pipefail -c '. "$1"; docs_check' bash "$p/receipts/scoped-owner-function.sh"
+Initial scoped run used container paths on host; discarded despite exit 0 because
+grep reported missing files. Converted paths and required each scope file exists;
+final run above has zero grep errors. Package index-target check also passed.
+
+Native Git full-package whitespace check is NOT green: exit 3, 64 diagnostics
+(47 trailing-whitespace, 17 extra EOF blank-line findings), confined to 20 newly
+staged historical logs plus first-draft-production.patch. Source/Markdown/other
+task files have zero diagnostics; homelab package has zero. Saved evidence bytes
+were NOT normalized or silently waived. Parent must decide evidence-only exception
+or normalization before claiming a strict package whitespace gate passed.
+Raw log: premerge-final/app-whitespace.log; detailed counts: app-whitespace-summary.json.
+
+Staged path scan: no worktree/.git/env/target/binaries/corpus/secret paths, no
+binary/NUL payloads or obvious credential signatures. Fifty staged evidence logs
+now durable; .gitignore adds ONLY !/docs/reliability-evidence/*.log. Main reports
+synthetic/test-only provenance; automated scan is not exhaustive privacy proof.
+All seven staged JSON reports parse in existing Apollo Python. No new dependencies.
+Approved exact builder-recipe local-source tar streamed/hash-checked on Apollo:
+866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72
+Reconstructed staged-source tar hash differs only in permission metadata
+(source 0600/0700 versus Git materialization 0644/0755). All 12 member names/types/
+sizes, nine file contents and file-executable bits match canonical approved archive;
+do not label reconstructed raw tar hash identical. See staged-source-byte-integrity.txt.
+Seed SHA256 4790883dbdbb788307c6e0f673337b94e1f1bb01b330bafbfd9b783fca225d02
+and preserved original byte copy match. No source divergence or Rust/model rerun.
+New staged merge-debug/release receipts each show 46 unit + 1 integration passed;
+merge-validation pins approved source. These logs were read, not regenerated.
+DR-14 in decision_readout.feature is @unautomated with global budget greater than
+one; no new automated several-client claim. Quality cause remains uncontrolled.
+
+SHA256 receipts under premerge-final/:
+app-staged.patch: 9b2d7a3608555158b08dd425673d33496db3a411fe7fee5c40ee81aa25391262
+app-index-blobs.txt: 5c109dbd8774e46bbd32ca9ec5ed94a87b9e897f4c1a2364cd08f462c1175685
+app-md-SHA256SUMS: 3adbc1d22516fbf096d1fe39313180a239a5b8be2fe7e1780105ec8fd323aed4
+Local commits/merges are authorized but NOT performed by this verifier. No staging,
+commits, merges, push, deploy, host/config/hook edits, local validators or inference.
+Only three owned text receipts updated; parent must restage them. Markdown/source
+stay checked. Full homelab prerequisite gate remains historically blocked/unretried.
+After receipt writes, current Markdown streamed again: remote sha256sum -c passed
+all 11 against staged checked hashes (premerge-final/app-after-receipts-md.log).
+Readonly unstaged diff lists only this owned receipt; parent restaging remains needed.
+
+Historical verification below, 2026-10-02T16:24:15Z (superseded by staged scope above):
+Outcome: 11 changed/new Markdown files passed; zero broken relative links.
+No native app docs-check target exists. Reused homelab bin/homelab docs_check
+function, replacing only file discovery with an explicit Markdown scope.
+Owner regex: grep -oE '\]\([^)]+\)' | sed -E 's/^\]\(//; s/\)$//'
+Owner URL/anchor exclusions and target-existence checks retained; anchor contents,
+external URLs, reference-style links and runtime behavior were not validated.
+
+Apollo workspace: /work/pqnld-docs-review-20261002 in dibuild
+Host backing: /mnt/data/ai/validation/decision-index-2026-10-01/pqnld-docs-review-20261002
+Verified absent before exclusive mkdir; marker: pqnld-docs-review-20261002-7314
+Checks ran on Apollo host with existing Bash/grep/sed/find. No local validators,
+Rust commands, model calls, dependency installs, production edits or deployment.
+Transport: normalized tar of documentation and required static link targets only;
+no .git, target/build trees, credentials, root env_config.yaml or raw corpus.
+App base: 6651289f53d5e4cc9b9e13cfd71825c57822faa1
+Final docs captured: 2026-10-02T16:21:35Z; remote receipts under final-1619/.
+app-final-docs.tar SHA256: dbd01498b148c5510b478607bee4c7e4e1965d636d4a6e4bee7fb1fd7cf1d018
+Owner bin/homelab SHA256: 90141c56be462fa414e4cf8af87f9ae9390dffae40dc26a388e5244ca2b4c92a
+Scoped function SHA256: c36a8b662d8003680cbfbfedea2369b395a347aa77efdacce416a99e962b2e3f
+final-1619/app-md-SHA256SUMS SHA256: d729e7082fe6fe86099ce90c9ce507daa1c71dd02ba92723413b1b5628471d4b
+
+Remote command (p = host backing above):
+root="$p/app" scope="$p/final-1619/app-md-scope.txt" bash -euo pipefail -c '. "$1"; docs_check' bash "$p/receipts/scoped-owner-function.sh"
+Scope enumerated from git diff --name-only plus git ls-files --others --exclude-standard,
+filtered to ALL Markdown, not a hand-selected subset.
+Result: exit 0; files 11; broken 0. Raw receipt: final-1619/app-scoped-links.log
+After receipt updates, streamed current Markdown again; remote sha256sum -c
+passed all 11 against checked manifest (final-1619/app-current-md-integrity.log).
+Controls used identical command with task-owned scope files under control/:
+existing ../app/README.md: exit 0, broken 0.
+missing definitely-missing-docs-control-7314.md: exit 1, broken 1.
+Both controls rerun on Apollo with owner -euo pipefail; results unchanged.
+
+Source integrity: streamed exact normalized builder tar recipe from apollo-test.sh
+(Makefile; Cargo.toml/Cargo.lock; src; models; tests) WITHOUT executing that script.
+Remote source-pin.tar SHA256 matched approved 47-debug/47-release source exactly:
+866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72
+No source divergence; no builder workspace writes and no Rust/build rerun.
+Seed SHA256: 4790883dbdbb788307c6e0f673337b94e1f1bb01b330bafbfd9b783fca225d02
+Remote hash and cmp against initial preserved seed byte copy both passed.
+Fresh quality document captured after successful sample: 100/100, zero errors,
+270.1s supervised pipeline, all 760 answers match v7; no causal accuracy gain.
+This subtask validates documentation/links, not fresh-run runtime measurements.
+
+Whitespace, Apollo native Git: git diff --no-index --check BEFORE AFTER for all
+10 tracked changed app files, using git archive HEAD baseline and current bytes;
+git diff --no-index --check /dev/null FILE for five new Markdown files, two new
+behavior contracts, apollo-test.sh and actual archived tests/temperature.rs.
+Exit 1 is expected differing-content status; whitespace diagnostic logs are empty.
+An extra check named nonexistent cli_validation.rs; that path error is excluded,
+not a source finding. Actual archived temperature.rs checked with zero diagnostics.
+Baseline trailing-whitespace scan of those ten files: zero; unrelated/unchanged
+files were not given a whitespace gate. No legacy whitespace changed.
+Tracked patch SHA256: 80a6e6a6d3228a34408df93b108872156c7f7e099c13c9585a97056052d29dee
+Readonly rtk git status + untracked listing retained as final-1619/app-status-untracked.txt.
+Delivery remains untracked: new plans/reviews, behavior files, quality reports,
+reliability evidence/helper/patch and sidecar-rs/tests/temperature.rs. No staging,
+commits, pushes, deployment or changes to existing user work.
+
+Checked document revisions (SHA256):
+1b970670e8018782520e6fe1889047935278e5a29d448f234bf2f1cbdd1b15ff  README.md
+328a7e118c8b9db0041bf957df9e30f44abf7c1da8b9a4b4d3b5b5f7bf858900  sidecar-rs/README.md
+599d0d2b0d6845009debe473c0f6af58c610eff2549a3ca723533712129c79c9  docs/architecture.md
+b61d74c23a6cb85af3c7aadbe55e116176426cfbedbb463d24d2ec9398a4113b  docs/decision-index-validation.md
+1c41a3222ba0eea7dabe04a836838ca588ca9f8290537dbdbe0404b1978c3926  docs/readout-one-pager.md
+77c73d2128e32b16b9fe61e0374fabe486d2ea4afdb140121d6d48449fd4b551  docs/wire.md
+1446f34f5ce86002c92d6c2af743d975814dd319f5136d62a64f2da723ac151f  docs/decision-index-quality.md
+f083cdc0979baf8a95a1234b197ff8b9d9763d36d3c4a5561d784a250dc72341  docs/global-worker-plan.md
+97033cdfb3728963e73238571e4df6ecf7c0e832dd2b3ce9c12358b23ecbcdd6  docs/reliability-improvements.md
+613c7f4e518b351029b52c8e5ebfbb2c2b1e01f5f74b7f4b7de110256f858889  docs/reliability-review.md
+5ed6309ab81f91330d39807a821c04511e2952e7b6d3a21d3fba9796c231829e  docs/reliability-evidence/receipt.md
+
+Limits: snapshot-only result. Later changes to listed documents or linked targets
+invalidate this evidence. Quality-agent documents were read/copied, never edited.
+Homelab owner docs-check still exits 1 on exactly 14 baseline links, zero new;
+homelab full gate remains blocked, not cleared or retried. See its final receipts.

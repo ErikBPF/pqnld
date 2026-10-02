@@ -1,0 +1,130 @@
+cargo test --manifest-path sidecar-rs/Cargo.toml
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.26
+   Compiling quote v1.0.47
+   Compiling stable_deref_trait v1.2.1
+   Compiling libc v0.2.189
+   Compiling writeable v0.6.4
+   Compiling itoa v1.0.18
+   Compiling pin-project-lite v0.2.17
+   Compiling futures-core v0.3.34
+   Compiling litemap v0.8.3
+   Compiling utf8_iter v1.0.4
+   Compiling icu_properties_data v2.3.0
+   Compiling icu_normalizer_data v2.3.0
+   Compiling smallvec v1.16.2
+   Compiling bytes v1.12.1
+   Compiling serde_core v1.0.229
+   Compiling percent-encoding v2.3.2
+   Compiling httparse v1.10.1
+   Compiling futures-task v0.3.34
+   Compiling slab v0.4.12
+   Compiling try-lock v0.2.5
+   Compiling serde v1.0.229
+   Compiling zmij v1.0.23
+   Compiling once_cell v1.21.4
+   Compiling tower-service v0.3.3
+   Compiling want v0.3.1
+   Compiling hashbrown v0.17.1
+   Compiling form_urlencoded v1.2.2
+   Compiling futures-util v0.3.34
+   Compiling sync_wrapper v1.0.2
+   Compiling futures-channel v0.3.34
+   Compiling equivalent v1.0.2
+   Compiling atomic-waker v1.1.2
+   Compiling httpdate v1.0.3
+   Compiling serde_json v1.0.151
+   Compiling tower-layer v0.3.3
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/icu_normalizer_data-91860a7cf1d69722/rustcnOxklc/symbols.o" "<2 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/icu_normalizer_data-91860a7cf1d69722/rustcnOxklc/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/icu_normalizer_data-91860a7cf1d69722/build_script_build-91860a7cf1d69722" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /home/erik/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/ld.lld: line 5: /nix/store/cdgc1rh9s22n5i5cgr96vda0pjx1xg3x-rustup-1.29.0/nix-support/ld-wrapper.sh: No such file or directory
+          collect2: error: ld returned 127 exit status
+          
+
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/icu_properties_data-deeaafff8fabaa3c/rustczMTAh9/symbols.o" "<2 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/icu_properties_data-deeaafff8fabaa3c/rustczMTAh9/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/icu_properties_data-deeaafff8fabaa3c/build_script_build-deeaafff8fabaa3c" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /home/erik/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/ld.lld: line 5: /nix/store/cdgc1rh9s22n5i5cgr96vda0pjx1xg3x-rustup-1.29.0/nix-support/ld-wrapper.sh: No such file or directory
+          collect2: error: ld returned 127 exit status
+          
+
+   Compiling ryu v1.0.23
+error: could not compile `icu_normalizer_data` (build script) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `icu_properties_data` (build script) due to 1 previous error
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/proc-macro2-35dd3bf6fcab5855/rustcRDVKkK/symbols.o" "<3 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/proc-macro2-35dd3bf6fcab5855/rustcRDVKkK/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/proc-macro2-35dd3bf6fcab5855/build_script_build-35dd3bf6fcab5855" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /home/erik/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/ld.lld: line 5: /nix/store/cdgc1rh9s22n5i5cgr96vda0pjx1xg3x-rustup-1.29.0/nix-support/ld-wrapper.sh: No such file or directory
+          collect2: error: ld returned 127 exit status
+          
+
+error: could not compile `proc-macro2` (build script) due to 1 previous error
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/serde-b05573a9630c9b08/rustcr9lyLs/symbols.o" "<3 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/serde-b05573a9630c9b08/rustcr9lyLs/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/serde-b05573a9630c9b08/build_script_build-b05573a9630c9b08" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /home/erik/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/ld.lld: line 5: /nix/store/cdgc1rh9s22n5i5cgr96vda0pjx1xg3x-rustup-1.29.0/nix-support/ld-wrapper.sh: No such file or directory
+          collect2: error: ld returned 127 exit status
+          
+
+error: could not compile `serde` (build script) due to 1 previous error
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/quote-9302f52a5d1592f5/rustcAH7TVk/symbols.o" "<2 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/quote-9302f52a5d1592f5/rustcAH7TVk/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/quote-9302f52a5d1592f5/build_script_build-9302f52a5d1592f5" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /home/erik/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/ld.lld: line 5: /nix/store/cdgc1rh9s22n5i5cgr96vda0pjx1xg3x-rustup-1.29.0/nix-support/ld-wrapper.sh: No such file or directory
+          collect2: error: ld returned 127 exit status
+          
+
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/zmij-33d323289228f735/rustcPB9PoM/symbols.o" "<2 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/zmij-33d323289228f735/rustcPB9PoM/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/zmij-33d323289228f735/build_script_build-33d323289228f735" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /home/erik/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/ld.lld: line 5: /nix/store/cdgc1rh9s22n5i5cgr96vda0pjx1xg3x-rustup-1.29.0/nix-support/ld-wrapper.sh: No such file or directory
+          collect2: error: ld returned 127 exit status
+          
+
+error: could not compile `quote` (build script) due to 1 previous error
+error: could not compile `zmij` (build script) due to 1 previous error
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/httparse-a0b58dd76fe5a3c6/rustcHRTOGA/symbols.o" "<3 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/httparse-a0b58dd76fe5a3c6/rustcHRTOGA/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/httparse-a0b58dd76fe5a3c6/build_script_build-a0b58dd76fe5a3c6" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /home/erik/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/ld.lld: line 5: /nix/store/cdgc1rh9s22n5i5cgr96vda0pjx1xg3x-rustup-1.29.0/nix-support/ld-wrapper.sh: No such file or directory
+          collect2: error: ld returned 127 exit status
+          
+
+error: could not compile `httparse` (build script) due to 1 previous error
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/serde_json-53d909571e2b34c7/rustcD9RlhQ/symbols.o" "<2 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/serde_json-53d909571e2b34c7/rustcD9RlhQ/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/serde_json-53d909571e2b34c7/build_script_build-53d909571e2b34c7" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /home/erik/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/ld.lld: line 5: /nix/store/cdgc1rh9s22n5i5cgr96vda0pjx1xg3x-rustup-1.29.0/nix-support/ld-wrapper.sh: No such file or directory
+          collect2: error: ld returned 127 exit status
+          
+
+error: could not compile `serde_json` (build script) due to 1 previous error
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/serde_core-67d162b363a01014/rustclZOgkO/symbols.o" "<3 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/serde_core-67d162b363a01014/rustclZOgkO/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/serde_core-67d162b363a01014/build_script_build-67d162b363a01014" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /home/erik/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/ld.lld: line 5: /nix/store/cdgc1rh9s22n5i5cgr96vda0pjx1xg3x-rustup-1.29.0/nix-support/ld-wrapper.sh: No such file or directory
+          collect2: error: ld returned 127 exit status
+          
+
+error: could not compile `serde_core` (build script) due to 1 previous error
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/libc-de5409fef103435e/rustcxq60zY/symbols.o" "<5 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/libc-de5409fef103435e/rustcxq60zY/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/erik/Documents/erik/pqnld/worktrees/reliability-20261002/sidecar-rs/target/debug/build/libc-de5409fef103435e/build_script_build-de5409fef103435e" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /home/erik/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld/ld.lld: line 5: /nix/store/cdgc1rh9s22n5i5cgr96vda0pjx1xg3x-rustup-1.29.0/nix-support/ld-wrapper.sh: No such file or directory
+          collect2: error: ld returned 127 exit status
+          
+
+error: could not compile `libc` (build script) due to 1 previous error
+make: *** [Makefile:16: test] Error 101

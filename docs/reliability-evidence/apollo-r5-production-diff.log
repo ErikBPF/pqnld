@@ -1,0 +1,53 @@
+--- pre-Q5/main.rs
++++ Q5/main.rs
+@@ -662,9 +662,9 @@
+ }
+ 
+ fn validate_question_input(key: &str, question: &Value) -> Result<(), EngineError> {
+-    if !question.is_object() || question.get("instructions").and_then(Value::as_str).is_none() {
++    if !question.is_object() || question.get("instructions").is_none() {
+         return Err(EngineError::Unsupported(format!(
+-            "{key}: question requires string instructions"
++            "{key}: question requires instructions"
+         )));
+     }
+     match question.get("type").and_then(Value::as_str) {
+@@ -675,11 +675,6 @@
+             if !(2..=255).contains(&criteria.len()) {
+                 return Err(EngineError::Unsupported(format!(
+                     "{key}: a choice takes 2 to 255 options"
+-                )));
+-            }
+-            if criteria.values().any(|value| !value.is_null() && !value.is_string()) {
+-                return Err(EngineError::Unsupported(format!(
+-                    "{key}: criteria descriptions must be strings or null"
+                 )));
+             }
+         }
+--- pre-Q5/mcp.rs
++++ Q5/mcp.rs
+@@ -33,12 +33,12 @@
+                                 "required": ["type", "instructions", "criteria"],
+                                 "properties": {
+                                     "type": {"const": "choice"},
+-                                    "instructions": {"type": "string"},
++                                    "instructions": {},
+                                     "criteria": {
+                                         "type": "object",
+                                         "minProperties": 2,
+                                         "maxProperties": 255,
+-                                        "additionalProperties": {"type": ["string", "null"]}
++                                        "additionalProperties": true
+                                     }
+                                 }
+                             },
+@@ -47,7 +47,7 @@
+                                 "required": ["type", "instructions"],
+                                 "properties": {
+                                     "type": {"const": "noul"},
+-                                    "instructions": {"type": "string"}
++                                    "instructions": {}
+                                 }
+                             }
+                         ]
+scope check PASS: validator + MCP schema only; renderer, engine and remaining production code unchanged
