@@ -21,10 +21,8 @@ instead of `item-13`. Unterminated continuation likelihoods reward the shorter
 prefix event; this arm is a diagnostic baseline, not a recommended probability
 estimator. A future terminated-continuation arm must verify the model's actual
 answer-ending token and score that ending too, rather than length-normalizing
-arbitrarily. Follow-up: the fallback now refuses prefix-overlapping keys before
-inference. The table preserves the pre-fix results; rerunning now records errors
-for those two cases instead of misleading answers. This narrows supported inputs
-but does not claim to solve echo length or tokenizer-boundary sensitivity.
+arbitrarily. Current echo scoring refuses prefix-overlapping keys before inference;
+length and tokenizer-boundary sensitivity remain operating constraints.
 
 The reasoning arm generated at most 128 analysis tokens with thinking disabled,
 then passed that analysis alongside the original state to a separate exact-label
@@ -32,11 +30,11 @@ request. It is a two-pass explicit-analysis experiment, not native hidden
 reasoning or an RL-trained method. Finish reasons are recorded. Higher confidence
 on eight easy examples does not establish better calibration.
 
-Exact scoring remains experimental because the earlier simultaneous-chat test
-failed inside vLLM's logprob serializer. This sequential run does not clear that
-gate. JSON needs a separate mixed-load test too.
+Exact-ID shared-chat/MTP acceptance is pending; see
+[current serving status](readout-one-pager.md). This experiment does not establish
+mixed-load readiness for any arm.
 
-## Reproduce or supply private cases
+## Historical experiment inputs
 
 The Python comparison harness was removed in the Rust-only port; these were its
 historical commands:
@@ -49,7 +47,7 @@ PYTHONPATH=src python3 benchmarks/compare.py --url http://localhost:21542 --rows
 Input is one object per line: `id`, `state`, `question`, `expected`. A question
 has `type: "choice"`, `instructions`, and a `criteria` mapping. Expected is one
 criterion key. This deliberately small format is not the raw Decision Index
-row format and does not support noul yet. Do not commit private case content.
+row format and did not support noul. Do not commit private case content.
 
 Stdout is JSONL: dataset hash/configuration manifest, per-case answers/errors,
 and arm summaries. Failures count against all-case accuracy. Probability metrics
@@ -73,8 +71,6 @@ feed arbitrary kit rows to this custom choice runner or label its aggregate
 accuracy as a Decision Index score. A JSON-only choice arm is not a complete
 typed-probability engine for that suite.
 
-Next gates: acquire/verify the official suite; bind compatible arms to its
-engine interface; add representative private cases; evaluate held-out quality
-and option sensitivity; measure repeated cold/warm and mixed-chat loads. Fit
-temperature only on a separate calibration split. Compare LoRA only after
-these baselines demonstrate a quality deficit; do not train on evaluation data.
+The official suite is verified and the pinned Rust sample is complete.
+[Current evaluation](decision-index-quality.md) reports its native metrics,
+coverage and calibration limits. Evaluation data remains evaluation-only.

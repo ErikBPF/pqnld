@@ -50,17 +50,16 @@ pqnld-rs --vllm-url http://127.0.0.1:11542 \
 checking that it is a socket. Do not point `--uds` at a pre-existing regular file
 or other non-socket path.
 
-## Determinism
+## Scheduling
 
 Question scoring and initial readout probes share a **global sidecar budget**
 (`--workers 1` by default). Each request retains stored question order at one
 worker; raising the budget permits concurrency. Failed concurrent decisions
 cancel and drain their remaining local tasks, reclaiming worker permits.
 
-This is not engine-wide determinism: ordinary chat sent directly to the model
-is outside the budget, and cancellation cannot unsend an upstream request already
-accepted. Batch numerics, MTP, engine restarts and result caching prevent a
-universal repeatability guarantee.
+The budget covers sidecar scoring, not ordinary chat sent directly to the model.
+Cancellation stops local tasks; upstream requests already accepted stay accepted.
+Engine batch numerics, MTP, restarts and cache state can change scores between runs.
 
 ### MCP
 

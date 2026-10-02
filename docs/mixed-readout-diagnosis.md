@@ -1,233 +1,98 @@
-# Mixed readout: speculative logprob incompatibility
+# Mixed readout: explicit-ID serving gate
 
-Observed 2026-09-27 on Apollo, vLLM `0.30.0`, fingerprint
-`vllm-0.30.0-tp2-20ea93de`, model `qwen38-27b-nvfp4`.
-Runtime startup logs show MTP speculative decoding with six speculative tokens,
-tensor parallelism two, and a maximum of eight sequences. Image/weight digests
-were initially unpinned. Follow-up identified the active image ID as
+## Current explicit-ID serving status
+
+**MTP stays enabled. Exact-ID shared-chat serving remains opt-in and unaccepted.**
+The deployed engine uses its original MTP configuration and cache864; no engine
+patch is deployed. The no-MTP/cache800 configuration is diagnostic evidence,
+not a normal-deployment candidate.
+
+The unresolved engine defect is specific: mixed chat and explicit-ID requests
+can return **incomplete scores, wrong token IDs or HTTP 500**. The strict
+[Rust readout](../sidecar-rs/src/main.rs) refuses missing label evidence; it does
+not turn an HTTP 200 into invented probabilities.
+
+One resident model serves chat and decisions; fast completions remain primary.
+The [sidecar worker budget](../sidecar-rs/README.md#scheduling) bounds scoring and
+probes, not chat sent directly to the engine. A sidecar lock cannot establish
+engine-level mixed-serving correctness.
+
+## Evidence
+
+The inspected engine is vLLM `0.30.0`, fingerprint `vllm-0.30.0-tp2-20ea93de`,
+model `qwen38-27b-nvfp4`. Startup logs confirm **V2 Model Runner**, MTP with six
+speculative tokens, tensor parallelism two and a maximum of eight sequences.
+The identified image ID is
 `dce379422d6420af4006eacb78c677d2e864446858ab6b31b28aad2e86c6a7bf`.
-Startup logs explicitly confirm `Using V2 Model Runner`.
+These findings belong to that inspected snapshot, not every vLLM release.
 
-## Reproducer and observed results
-
-Historical reproducer (the Python harness was removed in the Rust-only port):
-
-```sh
-PYTHONPATH=src python3 benchmarks/mixed_readout.py --url http://localhost:21542
-```
-
-Use an otherwise idle engine. The script discovers three label IDs, runs one
-isolated decision, then sends the same decision after receiving streamed chat
-content. Each chat is bounded to 128 tokens. It records whether chat is still
-active at decision send and return, preserves HTTP error bodies and raw responses,
-and checks complete finite scores rather than treating HTTP 200 as success.
-Client overlap does not itself prove batch membership; engine instrumentation
-remains necessary to verify the exact runtime branch.
-
-| Condition | Decision result | Latency | Chat |
-|---|---|---:|---|
-| Isolated | All requested IDs 64, 65, 66 returned | 136 ms | Not run |
-| Chat without logprobs | HTTP 500: `list index out of range` | 338 ms | Successful; active at send and return |
-| Chat with top-k 3 | HTTP 200; IDs 65, 33, 292 instead of 64, 65, 66 | 337 ms | Successful; active at send and return |
-
-These are three diagnostic observations, not throughput, reliability, or quality
-estimates. The existing strict readout rejects the incomplete third response.
-
-## Source-level causal chain
-
-Paths below are relative to the installed `vllm` package read through the running
-process root. They describe this installed snapshot, not every upstream release.
-
-1. `entrypoints/openai/chat_completion/protocol.py:736` sets
-   `SamplingParams.logprobs=None` when `logprob_token_ids` is present, regardless
-   of the requested `top_logprobs`. This explains why top-k 1 did not help.
-2. `v1/worker/gpu/sample/states.py:56` records ordinary `sampling_params.logprobs`,
-   so an explicit-ID request contributes `NO_LOGPROBS` to that state.
-3. `v1/worker/gpu/model_runner.py:1552` selects ordinary sampling when no draft
-   tokens exist and rejection sampling otherwise. Ordinary sampling gathers
-   explicit IDs (`v1/worker/gpu/sample/sampler.py:163`).
-4. `v1/worker/gpu/spec_decode/rejection_sampler.py:107` returns no logprob tensors
-   when ordinary logprobs are absent. When another request enables them, it calls
-   `compute_topk_scores` without explicit-ID state. The model runner also explicitly
-   excludes token IDs in its speculative gathering path at line 1579.
-5. The scheduler expects scores because `SamplingParams.num_logprobs` recognizes
-   explicit IDs (`sampling_params.py:803`). Missing rows eventually reach
-   `entrypoints/openai/chat_completion/serving.py:1259`, which indexes them and fails.
-
-The older runner's rejection sampler also gathers generic top-k only. The active
-runner is now confirmed as V2; per-batch instrumentation remains outstanding. Both
-the source mismatch and the controlled change from absent scores to generic
-top-k scores point to speculative explicit-ID handling, not a PQNLD cache bug.
-
-## Repair gate
-
-Implement explicit-ID gathering for all generated positions in the owning
-engine/image source, preserving per-request boundaries, raw score semantics,
-and speculative acceptance/rejection mapping. Add engine regressions for isolated
-and mixed requests with/without ordinary logprobs, including multi-token outputs.
-Then run this diagnostic, the 26-label smoke, and sustained mixed-load checks.
-
-An alternative experiment is a restart with speculative decoding off;
-that tests a simpler serving configuration but may reduce chat throughput.
-Do not fix this by padding missing rows, forcing chat logprobs, biasing labels,
-or locking only the sidecar. Keep `specific_token_scores` opt-in until the gate passes.
-
-## Authorized no-MTP experiment
-
-The user authorized a temporary restart and restoration. A temporary container was
-created from the original container's recorded creation command, replacing the
-image tag with its exact image ID and removing only `--speculative-config` and
-its value. The original container remained intact and stopped during the trial.
-
-The trial failed during initialization: workers reported only 10.83/10.81 GiB free
-on 15.48 GiB devices, below the configured 90% requirement. No inference checks ran;
-this does not establish whether disabling MTP resolves scoring. The memory deficit
-may have been transient, but its cause was not established. No other process was
-stopped and no memory limits were changed to force the experiment through.
-
-The original container was restarted successfully and `/health` passed. Its startup
-then reported 14.92/14.90 GiB free. The temporary container was removed and the SSH
-tunnel closed. The retry recommendation from this initial trial was superseded
-by the coordinated cache experiment below.
-
-Follow-up retry on 2026-09-28 waited three minutes for GPU memory to stabilize;
-it did not, so no trial container was started. Restoration was also blocked by
-the free-memory check. `nvidia-smi` identified the remaining allocation as the
-existing LMCache server (PID 844249), holding approximately 4.4 GiB on each GPU.
-This establishes the allocation owner, not the internal reason it retained memory.
-
-With separate user authorization, the LMCache container was restarted, clearing
-volatile cache state. Free GPU memory rose to 15697/15832 MiB. The original engine
-then restarted successfully with its original image and MTP configuration.
-Both cache and engine health checks passed; a chat request returned `OK` with
-the original fingerprint. The experiment is stopped. No no-MTP inference evidence
-was obtained. Future restarts must account for LMCache's retained GPU allocations
-and explicitly include any necessary cache restart in their recovery procedure.
-
-Runtime owner: custom Podman store `/mnt/microvms/ai/cache/podman-root`, runroot
-`/run/apollo-ftw-containers`; original container
-`apollo-qwen38-gittensor-lmcache`. Build assets live at
-`/mnt/data/ai/validation/20260922-qwen38-repro`. Its `run-lmcache.sh` differs from
-the active container's arguments, so it must not be used blindly for restoration.
-
-## Successful coordinated experiment (2026-09-28)
-
-After authorization to proceed with serving gate 1, coordinated cache restarts
-resolved retained allocations. A no-MTP startup then exposed a second requirement:
-LMCache's 864-token chunk size must be a multiple of the no-MTP engine's 800-token
-block size. A temporary cache container with `--chunk-size 800`, together with a
-temporary engine with speculative configuration removed, started successfully.
-Both were derived from recorded creation commands with exact image IDs. Original
-containers were preserved, stopped during testing, and restored afterward.
-
-Results:
-
-| Check | Observed result |
+| Explicit-ID condition | Observed result |
 |---|---|
-| Three repetitions of isolated three-label scoring | 3/3 complete finite score sets |
-| Scoring during chat without logprobs | 3/3 complete; 433-438 ms |
-| Scoring during chat with top-k logprobs | 3/3 complete; 432-489 ms |
-| Chat overlap | All six chats successful and active at decision send and return |
-| 2/3/10/20/26 options, both orders, isolated | 10/10 correct and complete; median 252 ms |
-| 128-token counting chat, original MTP | Three calls: 1.102, 1.124, 1.095 seconds |
-| Same chat, no MTP + cache800 | Three calls: 6.213, 6.165, 6.236 seconds |
+| Isolated, three labels | All requested IDs 64, 65, 66 returned |
+| Overlapping chat without logprobs | HTTP 500: `list index out of range` |
+| Overlapping chat with top-k 3 | HTTP 200; IDs 65, 33, 292 instead of 64, 65, 66 |
 
-The median end-to-end counting response was about 5.6 times slower without MTP.
-These timings include SSH/HTTP overhead and prefill, not isolated decode TPS or
-TTFT. Repeated counting is favorable to speculative decoding; do not generalize
-the ratio to typical chat. The cache configuration also changed, and runs were
-sequential rather than randomized. This is bounded diagnostic evidence, not a
-sustained-load acceptance test. Concurrent 26-label/permutation coverage remains
-to be measured (the concurrent diagnostic used three labels).
+The overlapping chats succeeded and remained active at decision send and return.
+Client overlap is evidence of shared load, not proof of batch membership;
+per-batch engine instrumentation remains outstanding.
 
-Conclusion: no-MTP plus compatible cache geometry isolates the scoring defect,
-but is excluded from deployment. Preserve MTP by repairing explicit-ID gathering
-in the V2 rejection sampler before sustained acceptance tests. The deployed engine
-still uses original MTP and cache864; experimental scoring remains opt-in. Both
-original health checks passed, temporary containers were removed, and the tunnel
-was closed. No engine patch or permanent configuration change was made.
+### Owning source mismatch
 
-## MTP-preserving patch preparation
+Paths are relative to the installed `vllm` package inspected through the running
+process root:
 
-The human requires MTP for fast completions; decisions are a lower-priority
-capability on the same resident model. No-MTP is excluded from deployment.
+1. `entrypoints/openai/chat_completion/protocol.py:736` sets ordinary
+   `SamplingParams.logprobs=None` for `logprob_token_ids` requests.
+2. `v1/worker/gpu/sample/states.py:56` records ordinary logprobs, so an
+   explicit-ID request contributes `NO_LOGPROBS` to that state.
+3. `v1/worker/gpu/model_runner.py:1552` selects rejection sampling when draft
+   tokens exist. Ordinary sampling gathers explicit IDs in
+   `v1/worker/gpu/sample/sampler.py:163`.
+4. `v1/worker/gpu/spec_decode/rejection_sampler.py:107` returns no score tensors
+   without ordinary logprobs; when another request enables them, it gathers
+   generic top-k without explicit-ID state. The model runner excludes explicit
+   IDs from speculative gathering at line 1579.
+5. The scheduler still expects explicit-ID scores (`sampling_params.py:803`).
+   Missing rows reach `entrypoints/openai/chat_completion/serving.py:1259`,
+   which indexes them and fails.
 
-The historical `build_examples/2x-rtx5060ti/prepare_mtp_patch.py` (removed in the
-Rust-only port) emits a source-checked unified diff for the inspected snapshot. It wires existing explicit-ID scoring into the
-V2 rejection sampler, passes expanded request mappings through each verification
-chunk, and includes explicit-ID dimensions in sharded output gathering. A global
-batch maximum keeps logprob column widths compatible across verification chunks.
-Ordinary requests without logprobs preserve the existing early exit. This is a
-candidate patch generator, not an installed engine change.
+The absent-score/generic-top-k split matches the observed responses. The defect
+belongs to speculative explicit-ID handling, not the PQNLD result cache.
 
-`check_mtp_scores.py` (historical; removed in the Rust-only port) extracts the
-installed scoring method and exercises routing
-with CPU tensors, stubbed flattening and a recording scoring function. It failed
-against installed source with `speculative scorer lacks explicit-ID request
-mapping`, then passed against the proposed transformation in memory. Both modified
-modules compile. No installed files were changed and no GPU allocations were used
-by this check. This verifies argument routing and boundaries, not numerical GPU
-correctness, full chunk orchestration, adaptive verification, or distributed gather.
+### Candidate evidence, not deployment proof
 
-Before deployment: apply the diff in a pinned candidate image, verify raw numerical
-scores and request mappings across chunked/multi-token/adaptive cases, run repeated
-mixed 26-option/permutation checks, and compare completions TTFT/throughput/tail
-latency with the unpatched MTP baseline. Decision concurrency must be bounded;
-engine-level priority guarantees and an acceptable performance budget remain open.
+CPU component checks cover request mappings, raw-logit slices, rebased boundaries,
+common output widths and concatenated offsets across verification chunks.
+Adaptive-boundary checks preserve device offsets; verification and scoring in
+those CPU checks are stubbed.
 
-Follow-up CPU checks execute the installed chunk orchestration with synthetic
-noncontiguous request slots (7, 2, 9), multiple logits per request, and two
-verification chunks. They confirm per-chunk expanded mappings, raw-logit slices,
-rebased boundaries, common output widths, and concatenated request offsets.
-An adaptive-boundary check confirms device offsets are preserved. Verification
-and GPU scoring remain stubbed: these checks do not establish numerical kernel
-correctness or end-to-end adaptive verification behavior.
+The candidate scorer's **GPU numerical check passed** against PyTorch
+`log_softmax` on two devices. For `topk` in `(-1, 3)`, sampled and explicit-ID
+columns, `-inf` padding and `cu_num_generated_tokens=[0,2,3,6]` matched the
+reference for mixed ordinary/explicit-ID requests with unequal accepted lengths.
+This checks real scoring kernels, not a patched engine's full serving path.
 
-## Review revision 2
+The [pinned Decision Index sample](decision-index-validation.md) supplies separate
+end-to-end evaluation evidence. Its 100/100 completion is not shared-MTP
+acceptance. [Quality receipts](decision-index-quality.md#evidence-and-limits)
+retain evaluation provenance and its narrower scope.
 
-Independent review found and corrected partial-patch output on source drift,
-missing explicit-ID-only CPU coverage, and a constant-width fake that could hide
-incorrect request-slot selection. The generator now buffers both transformations
-before output and explicitly enables ID gathering in the model runner. A focused
-test covers that transformation; distributed gathering remains unverified.
+## Remaining acceptance checks
 
-`check_mtp_gpu.py` (historical; removed in the Rust-only port) adds a numerical
-candidate-image check using real scorer kernels
-and a PyTorch log-softmax reference, including sampled columns, mixed ordinary and
-explicit-ID requests, and unequal accepted lengths. It was not executable while the
-serving GPUs had only 424-438 MiB free; see the executed run below.
+- Complete finite explicit-ID evidence under mixed chat with and without ordinary
+  logprobs, across generated positions and speculative acceptance/rejection maps.
+- GPU chunk concatenation with **unequal chunk widths**, adaptive-verification
+  numerics and **TP2 sharded gathering**.
+- Repeated mixed 26-option/permutation coverage and sustained chat/decision load
+  on one pinned candidate engine; full patched shared serving remains unverified.
+- Completion TTFT, throughput and tail latency against the unpatched MTP baseline,
+  with a defined decision-concurrency/performance budget and engine priority policy.
 
-## GPU numerical check executed (2026-10-01)
+No padding missing rows, forcing chat logprobs or biasing labels to make checks
+green. The gate is complete, comparable score evidence without sacrificing the
+primary chat workload—not a friendlier error message.
 
-In an authorized maintenance window the engine and cache containers were stopped
-(`podman stop`), freeing both GPUs to 15849/15835 MiB, and the candidate patch was
-applied to the installed source extracted from the running engine image
-`dce3794...` (vLLM 0.30.0). `prepare_mtp_patch.py` matched every anchor: +9 lines in
-`v1/worker/gpu/spec_decode/rejection_sampler.py`, -4 lines in
-`v1/worker/gpu/model_runner.py`. The patched files were bind-mounted over the
-installed modules in a one-off container from the same engine image, and
-`check_mtp_gpu.py` ran against real devices (`torch.cuda`, 2 GPUs).
-
-Result: **passed**. For `topk` in `(-1, 3)` the patched method produced the sampled
-column and explicit-ID columns, `-inf` padding, and `cu_num_generated_tokens`
-`[0,2,3,6]` matching the PyTorch `log_softmax` reference for mixed ordinary and
-explicit-ID requests with unequal accepted lengths.
-
-Reproducing GPU access required the host driver mapping, not just device nodes:
-
-- `-v /run/opengl-driver/lib:/usr/local/nvidia/lib64:ro` — supplies the host driver
-  (`libcuda.so.595.99.02`); the image's bundled compat `libcuda` is `580.95.05` and
-  mismatches the host, raising CUDA error 803.
-- `-v /nix/store:/nix/store:ro` — the firmware driver directory is a tree of
-  `/nix/store` symlinks; without it `libcuda.so.1` dangles and CUDA reports no driver.
-- `-e LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/cuda/lib64`,
-  `-e NVIDIA_VISIBLE_DEVICES=void`, and the nvidia device nodes.
-
-Engine and cache were restored with `podman start` immediately afterward; `/version`
-returned 0.30.0, `/health` 200, the cache reported healthy, and a chat completion
-succeeded. No installed files or images were permanently modified.
-
-Still unverified before any deployment claim: GPU-level chunk concatenation with
-unequal chunk widths, adaptive-verification numerics, distributed (TP2) sharded
-gathering, and end-to-end serving where one patched engine answers chat and
-exact-token decisions concurrently. Those need a candidate image build.
+Runtime owner: `apollo-qwen38-gittensor-lmcache`, custom Podman store
+`/mnt/microvms/ai/cache/podman-root`, runroot `/run/apollo-ftw-containers`.
+Build provenance lives at `/mnt/data/ai/validation/20260922-qwen38-repro`;
+its `run-lmcache.sh` differs from active arguments and is not a restoration recipe.

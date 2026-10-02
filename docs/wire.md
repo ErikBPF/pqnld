@@ -1,9 +1,7 @@
 # Wire format
 
-pqnld speaks the [Decision Index][di] shape: a `state` and a set of typed
-`questions`, answered with one typed answer per question.
-
-[di]: https://huggingface.co/spaces/multimodalart/jev-decision-index
+pqnld takes a `state` and a set of typed `questions`, and returns one typed
+answer per question.
 
 ## `POST /v1/decide`
 
@@ -84,8 +82,7 @@ A rejected question is **never** guessed or truncated: capacity overflow is a
 
 ## `POST /v1/systemone`
 
-Alias of `/v1/decide`, kept so a stock Decision Index kit HTTP engine can point
-at pqnld unchanged. Identical request and response.
+Compatibility alias of `/v1/decide`. Identical request and response.
 
 ## `POST /v1/chat/completions`
 
@@ -93,7 +90,7 @@ An OpenAI-compatible shim so a router (e.g. LiteLLM) can register a pqnld
 endpoint as a chat model.
 
 - If the last user message is a JSON object with a `questions` key, it is treated
-  as a Decision Index request and answered as a decision; the response
+  as a decision request and answered as a decision; the response
   `message.content` is the JSON-encoded decision.
 - Otherwise the shim replies with a short notice explaining the expected format.
 - Streaming (`"stream": true`) is supported: one content chunk and a final

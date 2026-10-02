@@ -10,10 +10,8 @@ verification; an OpenAI-compatible API with logprobs alone does not establish
 compatibility. Add a descriptor with the model's chat template for echo scoring.
 
 **Is pqnld a replacement for my LLM?**
-No. It is a secondary decision capability that runs on the model you already
-serve. Keep your existing LLM for chat and generation; pqnld adds typed,
-closed-set decisions on top of the same endpoint, so you get more out of the
-infrastructure you already run without replacing it.
+Keep the model. Add a job. pqnld reads typed decisions from its logits while your
+existing chat and generation workload stays on the same endpoint.
 
 **Why does latency grow under load?**
 Requests wait for the sidecar worker budget and engine admission. Prompt length,
@@ -25,14 +23,13 @@ Long prompts spend more time in prefill. Separate time to first token from decod
 throughput, and distinguish cached from uncached requests when measuring.
 
 **Do decisions and chat really share one engine?**
-Yes. Lettered decisions use `max_tokens=1` plus logprobs on the existing endpoint.
-Shared-chat/MTP production readiness still requires mixed-load validation; sidecar
-worker limits do not govern chat sent directly to the engine.
+Yes. Same engine, different job. Lettered decisions request one token plus
+logprobs from your existing endpoint. Experimental exact-ID scoring has a
+[shared-chat/MTP validation gate](readout-one-pager.md#operating-reference).
 
 **Should I lower speculative decoding for faster decisions?**
-Keep MTP enabled for the primary chat workload. Optimizing a one-token decision
-must not silently sacrifice completion performance; pqnld does not change engine
-flags or speculative decoding policy.
+Keep MTP. Chat is the primary workload; a one-token decision is no reason to
+hobble completions. pqnld leaves engine flags and speculative decoding policy alone.
 
 **A decision came back slow even though nothing else was running.**
 The first call can include label-token discovery and an uncached prefill.
@@ -51,14 +48,13 @@ No. pqnld supports `choice` (2–255 options) and `noul` (a yes-probability). An
 unsupported type is refused with `422`, never approximated.
 
 **Can it hallucinate?**
-Not in the option sense: it only ever scores the options you supplied, so an
-answer outside your criteria is impossible. It can still be *wrong* or
-miscalibrated. A normalized distribution does not establish correctness.
+It cannot invent an option: answers stay inside your supplied criteria. Wrong
+choice? Still possible. Closed-set output is a contract, not clairvoyance.
 
 **Is it accurate / calibrated?**
 Accuracy depends on model, prompt, readout and backend together. Evaluate
 calibration and wrong-at-high-confidence on held-out labeled data before using
-confidence thresholds. See [the measured sample](decision-index-quality.md).
+confidence thresholds.
 
 **Does it need the thinking block disabled?**
 For thinking models you generally want `enable_thinking: false` so the answer
@@ -68,7 +64,7 @@ field; the shipped Qwen3.8 descriptor disables it.
 **How do I expose it to a router like LiteLLM?**
 Register `http://<host>:11560/v1` as an OpenAI provider with the base model equal
 to the `--model` name you served. The `/v1/chat/completions` shim accepts a
-Decision Index JSON user message and answers it as a decision.
+decision-request JSON user message and answers it as a decision.
 
 **Why `pqnld`?**
 Parallel Query Node, Logit Decisions.
