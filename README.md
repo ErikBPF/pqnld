@@ -64,7 +64,9 @@ Grab the static binary from the
 cargo build --release --manifest-path sidecar-rs/Cargo.toml
 ```
 
-This quickstart uses the live-tested vLLM adapter. Other backend support is
+This quickstart uses the live-tested vLLM adapter. llama.cpp's native top-k
+surface is live-tested as well and needs a `top_k_floor` in the descriptor; see
+[engine capabilities](docs/engine-capabilities.md). Other backend support is
 documented in [engine capabilities](docs/engine-capabilities.md).
 
 ```sh

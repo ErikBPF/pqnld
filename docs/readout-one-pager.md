@@ -31,7 +31,10 @@ See [wire contract](wire.md) and [implementation](../sidecar-rs/src/main.rs).
 - Scoring and probes share a [worker budget](../sidecar-rs/README.md#scheduling).
   Ordering, concurrency and cancellation have one documented operating contract.
 - [Engine adapters](engine-capabilities.md) exist for vLLM, llama.cpp, SGLang and
-  OpenAI. vLLM is live-tested; other adapters have compile and parser-unit coverage.
+  OpenAI. vLLM and llama.cpp (native top-k) are live-tested; SGLang and OpenAI
+  have compile and parser-unit coverage. llama.cpp needs a model descriptor whose
+  `top_k_floor` covers its answer-slot ranking; see
+  [label-bias-results.md](label-bias-results.md).
 
 ## Latest verification
 

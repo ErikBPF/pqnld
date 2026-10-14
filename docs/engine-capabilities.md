@@ -244,10 +244,21 @@ use top-k (chat) or echo (legacy completions, `logprobs<=5`).
 | SGLang | exact IDs / top-k | `/generate` `token_ids_logprob`; `/v1/score` `label_token_ids` | `/tokenize` | `/generate` `logprob_start_len:0` |
 | OpenAI | top-k | — | none | legacy `/v1/completions` `echo:true`, `logprobs<=5` |
 
+Resolved 2026-10-13 (llama.cpp): the adapter is **live-verified** against the
+pinned `ggml-org/llama.cpp` image for the native top-k surface —
+`/tokenize` → one id per label, `/completion` `n_probs` accepted at 8/20/64/256
+with exactly that many `top_logprobs` returned (no hard cap), `/props` and
+`/health` present, and fail-closed refusal when a label is missing. Coverage is
+model-dependent: with a 4B tool-calling model's prompt format the required read
+width lay between `top_k_floor: 512` (complete only up to 7 options) and
+`4096` (complete up to 26). Exact-id scoring is still unavailable and refused
+honestly; >26 options still route to the echo path and are refused. Evidence:
+`docs/label-bias-results.md`.
+
 Unresolved / to verify before claiming live adapter support: SGLang's OpenAI
 chat coverage for top-k (`top_logprobs`) under reasoning models; whether OpenAI's
-newer reasoning models accept `logprobs`/`top_logprobs` at all; llama.cpp `n_probs`
-behaviour at very large k. The vLLM explicit-ID defect under MTP remains the
+newer reasoning models accept `logprobs`/`top_logprobs` at all; the read width
+needed on a task-competent llama.cpp model. The vLLM explicit-ID defect under MTP remains the
 blocking gate for exact-ID shared serving on Apollo; see
 [mixed-readout-diagnosis.md](mixed-readout-diagnosis.md).
 Do not build a server-side SGLang `/v1/decisions` fast path yet — it is a

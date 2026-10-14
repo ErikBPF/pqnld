@@ -26,6 +26,7 @@ without breaking.
 | `chat_template` | Qwen3.8 ChatML with an empty thinking block | Used by the echo fallback to build the raw context. `{system}` and `{body}` are substituted. Set to `null` only if you will not use echo |
 | `engine_profile` | `"full"` | Metadata only; pqnld does not configure the engine from this field |
 | `specific_token_scores` | `false` | Opt into explicit label-token ID scoring with a compatible adapter |
+| `top_k_floor` | `null` | Minimum generic top-k to request when the exact-id path is unavailable. `null` keeps the historical floor of 20 (`max(options, 20)`); an adapter without exact-id scoring (llama.cpp) may need a much wider read because its answer slot can rank option labels far below the default |
 
 ## Readout modes
 
