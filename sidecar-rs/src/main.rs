@@ -29,6 +29,7 @@ use tokio::net::{TcpListener, UnixListener};
 use tokio::sync::{Mutex, Semaphore};
 
 mod engine;
+mod labels;
 mod mcp;
 
 #[cfg(test)]
@@ -96,6 +97,12 @@ struct ModelSpec {
     engine_profile: String,
     #[serde(default)]
     specific_token_scores: bool,
+    /// Minimum generic top-k to request when the exact-id path is unavailable.
+    /// llama.cpp has no exact-id scoring, and its answer-slot distribution can
+    /// place option labels far below the default k, so a model that needs this
+    /// path declares how wide to read.
+    #[serde(default)]
+    top_k_floor: Option<usize>,
 }
 
 impl Default for ModelSpec {
@@ -110,6 +117,7 @@ impl Default for ModelSpec {
             chat_template: default_chat_template(),
             engine_profile: default_engine_profile(),
             specific_token_scores: false,
+            top_k_floor: None,
         }
     }
 }
@@ -173,10 +181,31 @@ struct Ctx {
     label_ids: Arc<Mutex<HashMap<String, u32>>>,
     sem: Arc<Semaphore>,
     workers: usize,
+    /// Default label permutation seed for the lettered readout; `None` keeps the
+    /// historical in-order binding. A question may override it with `label_seed`.
+    label_seed: Option<u64>,
 }
 
-fn extended_labels() -> Vec<char> {
-    let mut v = Vec::new();
+/// The label permutation seed for one question: the question's own `label_seed`
+/// when present, otherwise the process default.
+fn question_label_seed(ctx: &Ctx, question: &Value) -> Option<u64> {
+    question
+        .get("label_seed")
+        .and_then(Value::as_u64)
+        .or(ctx.label_seed)
+}
+
+/// Width of the generic top-k read. The default keeps the historical floor of
+/// 20; an exact-id-less engine (llama.cpp) can declare a wider read because its
+/// answer-slot distribution may rank option labels far below the default.
+fn topk_request_size(options: usize, floor: Option<usize>) -> usize {
+    match floor {
+        Some(floor) => std::cmp::max(options, 20).max(floor),
+        None => std::cmp::max(options, 20),
+    }
+}
+
+fn extended_labels() -> Vec<char> {    let mut v = Vec::new();
     for c in 'a'..='z' {
         v.push(c);
     }
@@ -436,6 +465,10 @@ async fn letter_scores(
     keys: &[String],
 ) -> Result<(Vec<f64>, i64, Option<String>), EngineError> {
     let option_labels = labels(ctx, keys.len()).await?;
+    let option_labels = match question_label_seed(ctx, question) {
+        Some(seed) => labels::permuted(option_labels, seed),
+        None => option_labels,
+    };
     let body = render_lettered(state, question, keys, &option_labels);
     let capabilities = ctx.engine.capabilities();
     let specific = ctx.spec.specific_token_scores && capabilities.exact_ids;
@@ -487,7 +520,7 @@ async fn letter_scores(
         } else {
             let scores = ctx
                 .engine
-                .topk(&body, std::cmp::max(keys.len(), 20))
+                .topk(&body, topk_request_size(keys.len(), ctx.spec.top_k_floor))
                 .await?;
             if top_token.is_none() {
                 let mut best: Option<(f64, String)> = None;
@@ -1145,6 +1178,9 @@ async fn main() {
         .and_then(|w| w.parse().ok())
         .unwrap_or(MAX_QUESTION_WORKERS)
         .max(1);
+    let label_seed: Option<u64> = arg_value(&args, "--label-permute-seed")
+        .or_else(|| env_first("PQNLD_LABEL_PERMUTE_SEED", "DECISION_LABEL_PERMUTE_SEED"))
+        .and_then(|s| s.parse().ok());
 
     let spec = load_spec(&models_dir, descriptor.as_deref().unwrap_or(&model));
     let temperature = arg_value(&args, "--temperature")
@@ -1196,6 +1232,7 @@ async fn main() {
         label_ids: Arc::new(Mutex::new(HashMap::new())),
         sem: Arc::new(Semaphore::new(workers)),
         workers,
+        label_seed,
     });
 
     let mode = match ensure_mode(&ctx).await {

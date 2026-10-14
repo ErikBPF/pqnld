@@ -382,8 +382,62 @@ pub(super) fn make_ctx(engine: MockEngine, spec: ModelSpec) -> (Arc<Ctx>, Arc<Mo
         label_ids: Arc::new(Mutex::new(HashMap::new())),
         sem: Arc::new(Semaphore::new(1)),
         workers: 1,
+        label_seed: None,
     });
     (ctx, engine)
+}
+
+fn make_seeded_ctx(seed: u64) -> Arc<Ctx> {
+    let (ctx, _) = make_ctx(MockEngine::topk_only(&[("a", -0.1)]), ModelSpec::default());
+    Arc::new(Ctx {
+        engine: ctx.engine.clone(),
+        model: ctx.model.clone(),
+        spec: ctx.spec.clone(),
+        temperature: ctx.temperature,
+        batch: ctx.batch,
+        extended: ctx.extended.clone(),
+        mode: ctx.mode.clone(),
+        cache: ctx.cache.clone(),
+        label_ids: ctx.label_ids.clone(),
+        sem: ctx.sem.clone(),
+        workers: ctx.workers,
+        label_seed: Some(seed),
+    })
+}
+
+#[test]
+fn top_k_request_size_keeps_the_default_floor_and_honours_a_declared_one() {
+    assert_eq!(topk_request_size(3, None), 20);
+    assert_eq!(topk_request_size(25, None), 25);
+    assert_eq!(topk_request_size(3, Some(512)), 512);
+    assert_eq!(topk_request_size(300, Some(64)), 300);
+}
+
+#[test]
+fn question_label_seed_prefers_the_question_value() {
+    let ctx = make_seeded_ctx(2);
+    assert_eq!(question_label_seed(&ctx, &json!({"label_seed": 3})), Some(3));
+    assert_eq!(question_label_seed(&ctx, &json!({})), Some(2));
+    let (unseeded, _) = make_ctx(MockEngine::topk_only(&[("a", -0.1)]), ModelSpec::default());
+    assert_eq!(question_label_seed(&unseeded, &json!({})), None);
+    assert_eq!(question_label_seed(&unseeded, &json!({"label_seed": 1})), Some(1));
+}
+
+#[test]
+fn seeded_binding_moves_the_label_not_the_option_order() {
+    let keys: Vec<String> = ["red", "blue", "green"].iter().map(|k| k.to_string()).collect();
+    let base: Vec<String> = ["a", "b", "c"].iter().map(|k| k.to_string()).collect();
+    let question = choice("Which colour is named?", &["red", "blue", "green"]);
+    let state = Value::String("The car is blue.".to_string());
+
+    let shifted = render_lettered(&state, &question, &keys, &labels::permuted(base.clone(), 2));
+    assert!(shifted.contains("c) red"), "{shifted}");
+    assert!(shifted.contains("a) blue"), "{shifted}");
+    assert!(shifted.contains("b) green"), "{shifted}");
+    assert!(shifted.find("c) red").unwrap() < shifted.find("a) blue").unwrap());
+
+    let unshifted = render_lettered(&state, &question, &keys, &base);
+    assert!(unshifted.contains("a) red"), "{unshifted}");
 }
 
 fn choice(instructions: &str, criteria: &[&str]) -> Value {
