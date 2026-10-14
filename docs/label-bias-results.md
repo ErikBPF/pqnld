@@ -133,11 +133,12 @@ arm's value is the adapter verdict below.
   reassignment; no answer changed for a label-specific reason. A model that
   performs the task would be needed to extend this to llama.cpp, and a
   restart-separated floor to tighten it.
-- **H1 extended (2026-10-14, Arm 3): rejected on a small model.** llama.cpp on
-  Apollo with `Qwen2.5-3B-Instruct-Q4_K_M` shows label-driven answers (9 of 13
-  questions rejected, `δ_L` up to 0.55 against `δ_P` ≤ 0.31) where the 27B vLLM arm
-  showed none — the letter prior decides when the model cannot answer from
-  content, and a matched control rules out the raw-prompt format.
+- **H1 extended (2026-10-14, Arms 3/5/6): rejected on every llama.cpp arm,
+  including 27B on GPU.** 3B, 9B and 27B are all label-driven (13/13, 9/13 and 8/13
+  questions rejected; `δ_L` up to 0.61 against `δ_P` ≤ 0.06), while the same 27B
+  family on vLLM is not. The dominant factor is the engine/readout path, not model
+  size; the 27B path control was inconclusive and a chat/system-prompt variant of
+  the llama.cpp lettered path is the next decisive test.
 - **H3 (Strata parity): gap, measured live.** Strata's server at the pinned commit
   serves no `logprobs`, no `/tokenize` and no `/completion`, so a pqnld readout
   cannot run against it; the earlier "no binary on Orion" blocker is superseded by
@@ -239,3 +240,63 @@ Strata serves neither; the echo path needs prompt logprobs, which it also does n
 serve. **Strata cannot serve a pqnld decision readout at all** without a new
 engine-side surface, so no parity measurement exists to make. No adapter was
 invented and no engine patch was written.
+
+## Arm 5 — llama.cpp, Apollo GPU, 9B (Qwen3.5-9B-Q4_K_M)
+
+Full offload (`-ngl 99`) on the freed Apollo cards, production stopped for the
+window and restored after. Two runs, 13 questions, **0 refusals**, bit-identical:
+`spread_p95 0.673`, `flip_rate 0.769`, `inversions 0.625`, **rejected 13 of 13**.
+Label flips exceed position flips on 10 of 13 questions and `δ_L` reaches 0.36
+against `δ_P` ≤ 0.22. GPU rather than CPU changes nothing about the verdict and
+improves coverage: the same fixture took ~3 minutes per run on CPU and ~20 seconds
+on GPU.
+
+## Arm 6 — llama.cpp, Apollo GPU, 27B (Qwen3.8-27B-UD-Q4_K_M)
+
+Same shape, 16.46 GB across both cards, two runs, 0 refusals, bit-identical:
+`spread_p95 0.758`, `flip_rate 0.750`, `inversions 0.375`, **rejected 8 of 13**.
+
+| question | k | p95 | flips (label) | flips (position) | inversions | max δ_L | max δ_P | verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| labels-k4:q1 | 4 | 0.899 | 0.750 | 0.000 | 0.375 | 0.609 | 0.061 | rejected |
+| s2-0002:q1 | 3 | 0.758 | 0.667 | 0.000 | 0.333 | 0.496 | 0.025 | rejected |
+| labels-k7:q1 | 7 | 0.733 | 0.571 | 0.143 | 0.357 | 0.370 | 0.045 | rejected |
+| labels-k13:q1 | 13 | 0.693 | 0.154 | 0.231 | 0.077 | 0.117 | 0.032 | rejected |
+| labels-k26:q1 | 26 | 0.674 | 0.038 | 0.500 | 0.269 | 0.057 | 0.025 | rejected |
+| s2-0006:q1 | 3 | 0.597 | 0.333 | 0.000 | 0.167 | 0.285 | 0.004 | rejected |
+| s2-0003:q1 | 3 | 0.560 | 0.333 | 0.000 | 0.167 | 0.259 | 0.018 | rejected |
+| s2-0004:q1 | 3 | 0.553 | 0.000 | 0.333 | 0.167 | 0.021 | 0.185 | rejected |
+| s2-0001:q1 | 3 | 0.448 | 0.000 | 0.000 | 0.000 | 0.163 | 0.006 | unresolved |
+| labels-k2:q1 | 2 | 0.412 | 0.000 | 0.000 | 0.000 | 0.206 | 0.146 | unresolved |
+| s2-0004:q2 | 3 | 0.397 | 0.000 | 0.000 | 0.000 | 0.064 | 0.136 | unresolved |
+| s2-0005:q1 | 25 | 0.307 | 0.000 | 0.000 | 0.000 | 0.029 | 0.014 | unresolved |
+| s2-0007:q1 | 3 | 0.111 | 0.000 | 0.000 | 0.000 | 0.038 | 0.036 | unresolved |
+
+A CPU run of the same model (single run, interrupted by the GPU stage, 34
+refusals) gives the same shape: p95 0.780, flips 0.750, inversions 0.375.
+
+## Cross-engine comparison, and the corrected reading
+
+| Engine / readout | Model | p95 | label flips | position flips | verdicts |
+|---|---|---:|---:|---:|---|
+| vLLM, exact IDs + chat/system prompt | 27B NVFP4 | 0.203 | 0.264 | 0.065 | supported 3 / unresolved 9 / rejected 1 |
+| llama.cpp, native top-k, raw prompt | 27B UD-Q4_K_M | 0.758 | 0.750 | 0.060 | rejected 8 / unresolved 5 |
+| llama.cpp, native top-k, raw prompt | 9B Q4_K_M | 0.673 | 0.769 | 0.050 | rejected 13 / unresolved 0 |
+| llama.cpp, native top-k, raw prompt | 3B Q4_K_M | 0.701 | 0.885 | 0.065 | rejected 9 / unresolved 4 |
+
+**The earlier conclusion needs correcting.** After the 3B result this file read the
+bias as conditional on model competence. With the 27B measured on the same engine
+family as the 3B and the 9B, the pattern is better explained by the **engine and
+readout path**: every llama.cpp arm is label-driven regardless of size, and the one
+arm that is not (vLLM) differs in three ways at once — exact-token-ID scoring
+instead of a top-k read, a chat request with `letter_system_prompt` instead of the
+raw completion prompt, and NVFP4 rather than a GGUF quant. Model competence shows
+up in the inversion rate, not in whether the letter decides.
+
+A control for the 27B (three label bindings of one question whose answer is `red`)
+did **not** resolve which of the three causes dominates: with a narrow top-k the
+letters are below the top tokens on that model, so both the raw and the chat
+request answer a newline. The decisive experiment is to give the llama.cpp lettered
+path a chat/system-prompt variant and re-run this fixture; that is now a tracked slice in the homelab coordination repo's official-support
+plan (`docs/proposals/2026-10-14-pqnld-llamacpp-official-support.md`) rather than
+an assumption. Until then, the honest statement is: on llama.cpp, the letter decides.
