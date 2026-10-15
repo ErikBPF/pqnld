@@ -300,3 +300,53 @@ request answer a newline. The decisive experiment is to give the llama.cpp lette
 path a chat/system-prompt variant and re-run this fixture; that is now a tracked slice in the homelab coordination repo's official-support
 plan (`docs/proposals/2026-10-14-pqnld-llamacpp-official-support.md`) rather than
 an assumption. Until then, the honest statement is: on llama.cpp, the letter decides.
+
+## Arm 7 — per-configuration sweep (size and quant), Apollo GPUs
+
+One arm pair per model/quant configuration, llama.cpp `b10853` on Apollo with full
+offload (`-ngl 99`), same 13-question fixture and the same read width
+(`top_k_floor: 2048`) for every row, **two runs per configuration, bit-identical,
+zero refusals everywhere**. The point is to read size and quant effects off
+separately, and to keep two questions apart: how far the model's answers diverge
+from the fixture's expected answer (`accuracy = 1 - inversions`), and how much the
+model's own answer moves under label and order permutation (the variance that the
+readout introduces).
+
+| configuration | accuracy vs expected | label flips | order flips | p95 spread | max δ_L | max δ_P | supported / unresolved / rejected |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Qwen2.5-3B Q4_K_M | 0.83 | 0.18 | 0.07 | 0.99 | 0.47 | 0.30 | 1 / 4 / 8 |
+| Qwen3.5-9B Q4_K_M | 0.66 | 0.46 | 0.12 | 0.67 | 0.38 | 0.21 | 0 / 0 / 13 |
+| Qwen3.5-9B Q8_0 | 0.66 | 0.49 | 0.14 | 0.67 | 0.35 | 0.21 | 0 / 0 / 13 |
+| Qwen2.5-14B Q4_K_M | 0.97 | 0.06 | 0.01 | 0.54 | 0.27 | 0.08 | 3 / 8 / 2 |
+| Qwen3.8-27B UD-IQ4_XS | 0.82 | 0.24 | 0.11 | 0.70 | 0.48 | 0.20 | 0 / 5 / 8 |
+| Qwen3.8-27B UD-Q4_K_M | 0.84 | 0.22 | 0.09 | 0.76 | 0.61 | 0.18 | 0 / 5 / 8 |
+| Qwen3.8-27B UD-Q4_K_XL | 0.86 | 0.20 | 0.07 | 0.75 | 0.50 | 0.19 | 0 / 5 / 8 |
+
+Reading, kept to what the numbers support:
+
+- **The letter lever dominates in every configuration.** Label flips exceed order
+  flips in all seven rows (0.06-0.49 against 0.01-0.14) and `δ_L` exceeds `δ_P`
+  everywhere (0.27-0.61 against 0.08-0.30). No size or quant removes it, and no row
+  is label-invariant on this engine.
+- **Quant barely matters.** At 9B, Q4_K_M and Q8_0 are within noise of each other
+  (accuracy 0.66/0.66, label flips 0.46/0.49, p95 identical). At 27B the three
+  quants span 0.82-0.86 accuracy and 0.20-0.24 label flips, i.e. the quant axis is
+  a few points wide while the label effect is a factor of 2-10 over the order
+  effect. The concern that quant divergence explains the earlier cross-engine gap
+  is therefore not supported: quant divergence is *smaller* than the label effect
+  in every matched pair measured here.
+- **Accuracy is not monotone in size on this fixture, and the gaps are small.**
+  14B scores highest (0.97) and 9B lowest (0.66), with 27B between (0.82-0.86).
+  Thirteen questions give a granularity of 0.077, so the 14B-to-27B gap is under
+  two questions; the ladder is too coarse to claim a size effect on accuracy.
+  14B is also the only row from a different family (Qwen2.5 vs Qwen3.5/3.8), so its
+  outlier status (least label-sensitive) is confounded with family and prompt
+  format rather than attributable to size.
+- **Within-run variance is zero** (identical repeats and identical runs), so every
+  variance figure above is between-permutation variance — the bias — not
+  measurement noise.
+
+Follow-up this generates: the 14B row is the only configuration whose decisions are
+mostly stable (6% label flips). Whether that is family, prompt format or its task
+competence is not separable with one model per size; a same-family 14B or a second
+Qwen2.5 size would settle it.
