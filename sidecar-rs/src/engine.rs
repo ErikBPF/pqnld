@@ -147,6 +147,7 @@ pub fn build(
     system_prompt: String,
     enable_thinking: bool,
     top_k_floor: Option<usize>,
+    lettered_chat: bool,
 ) -> Arc<dyn Engine> {
     let endpoint = Endpoint {
         client,
@@ -158,7 +159,7 @@ pub fn build(
     };
     match kind {
         EngineKind::Vllm => Arc::new(VllmEngine { endpoint }),
-        EngineKind::LlamaCpp => Arc::new(LlamaCppEngine { endpoint }),
+        EngineKind::LlamaCpp => Arc::new(LlamaCppEngine { endpoint, lettered_chat }),
         EngineKind::Sglang => Arc::new(SglangEngine { endpoint }),
         EngineKind::OpenAi => Arc::new(OpenAiEngine {
             endpoint,
@@ -342,6 +343,11 @@ impl Engine for VllmEngine {
 
 pub struct LlamaCppEngine {
     endpoint: Endpoint,
+    /// Read the lettered answer slot through `/v1/chat/completions` with the
+    /// letter system prompt (the measured default: same weights, ~8x fewer
+    /// label-driven flips than the native raw-completion prompt) instead of the
+    /// native `/completion` raw prompt.
+    lettered_chat: bool,
 }
 
 impl Engine for LlamaCppEngine {
@@ -353,7 +359,11 @@ impl Engine for LlamaCppEngine {
             prompt_logprobs: false,
             max_top_k: None,
             max_explicit_ids: None,
-            surface: Surface::NativeGenerate,
+            surface: if self.lettered_chat {
+                Surface::ChatCompletions
+            } else {
+                Surface::NativeGenerate
+            },
         }
     }
 
@@ -379,6 +389,16 @@ impl Engine for LlamaCppEngine {
 
     fn topk<'a>(&'a self, prompt: &'a str, k: usize) -> BoxFuture<'a, Result<Vec<(String, f64)>, EngineError>> {
         Box::pin(async move {
+            if self.lettered_chat {
+                // llama.cpp maps `logprobs` + `top_logprobs` to its native
+                // `n_probs`, so the same OpenAI-shaped request works here.
+                let request = self.endpoint.chat_body(prompt, json!({"top_logprobs": k}));
+                let payload = self
+                    .endpoint
+                    .post_json("/v1/chat/completions", &request)
+                    .await?;
+                return parse_chat_topk(&payload).ok_or_else(no_answer_slot);
+            }
             let body = json!({
                 "model": self.endpoint.model,
                 "prompt": prompt,
@@ -832,7 +852,7 @@ mod tests {
         });
         let client = reqwest::Client::builder().no_proxy()
             .timeout(std::time::Duration::from_secs(2)).build().unwrap();
-        (build(kind, client, url, "test".to_string(), "system".to_string(), false, None), server)
+        (build(kind, client, url, "test".to_string(), "system".to_string(), false, None, true), server)
     }
 
     #[tokio::test]
@@ -1019,7 +1039,22 @@ mod tests {
         );
     }
 
-    #[test]
+    #[tokio::test]
+    async fn llamacpp_chat_surface_parses_openai_shaped_logprobs() {
+        // The native surface parses `completion_probabilities`; this payload only
+        // has the chat shape, so a pass proves the chat request path was used.
+        let (engine, server) = fixture_engine(
+            EngineKind::LlamaCpp,
+            json!({"choices": [{"logprobs": {"content": [{"token": "b",
+                "top_logprobs": [{"token": "b", "logprob": -0.1}, {"token": "a", "logprob": -2.0}]}]}}]}),
+        )
+        .await;
+        let scores = engine.topk("prompt", 8).await.unwrap();
+        server.await.unwrap();
+        assert_eq!(scores.len(), 2);
+        assert_eq!(scores[0].0, "b");
+    }
+
     #[test]
     fn openai_topk_size_honours_a_declared_wider_read() {
         // The OpenAI API caps at 20; a declared floor raises it for compatible

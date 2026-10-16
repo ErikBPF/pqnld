@@ -244,6 +244,14 @@ use top-k (chat) or echo (legacy completions, `logprobs<=5`).
 | SGLang | exact IDs / top-k | `/generate` `token_ids_logprob`; `/v1/score` `label_token_ids` | `/tokenize` | `/generate` `logprob_start_len:0` |
 | OpenAI | top-k | — | none | legacy `/v1/completions` `echo:true`, `logprobs<=5` |
 
+Resolved 2026-10-15 (llama.cpp lettered surface): the lettered readout defaults
+to the **chat** surface (`/v1/chat/completions` with `letter_system_prompt`), not
+the native raw prompt. On identical weights (27B UD-Q4_K_M, 13-question fixture,
+read width 2048) the raw prompt gave label flips 0.22, p95 spread 0.76 and
+accuracy 0.84, while the chat surface gave 0.03, 0.08 and 0.99. `lettered_surface:
+"native"` opts out. Reaching the letters on the chat surface also required the
+OpenAI-shaped request to honour `top_k_floor` rather than clamping at 20.
+
 Resolved 2026-10-13 (llama.cpp): the adapter is **live-verified** against the
 pinned `ggml-org/llama.cpp` image for the native top-k surface —
 `/tokenize` → one id per label, `/completion` `n_probs` accepted at 8/20/64/256

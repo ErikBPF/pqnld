@@ -414,6 +414,13 @@ fn top_k_request_size_keeps_the_default_floor_and_honours_a_declared_one() {
 }
 
 #[test]
+fn lettered_surface_defaults_to_chat_and_allows_a_native_opt_out() {
+    assert!(lettered_chat_surface(None));
+    assert!(lettered_chat_surface(Some("chat")));
+    assert!(!lettered_chat_surface(Some("native")));
+}
+
+#[test]
 fn question_label_seed_prefers_the_question_value() {
     let ctx = make_seeded_ctx(2);
     assert_eq!(question_label_seed(&ctx, &json!({"label_seed": 3})), Some(3));

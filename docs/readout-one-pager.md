@@ -33,7 +33,8 @@ See [wire contract](wire.md) and [implementation](../sidecar-rs/src/main.rs).
 - [Engine adapters](engine-capabilities.md) exist for vLLM, llama.cpp, SGLang and
   OpenAI. vLLM and llama.cpp (native top-k) are live-tested; SGLang and OpenAI
   have compile and parser-unit coverage. llama.cpp needs a model descriptor whose
-  `top_k_floor` covers its answer-slot ranking; see
+  `top_k_floor` covers its answer-slot ranking, and its lettered readout defaults
+  to the chat surface (raw-prompt opt-out); see
   [label-bias-results.md](label-bias-results.md).
 
 ## Latest verification

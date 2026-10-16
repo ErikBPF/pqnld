@@ -97,6 +97,12 @@ struct ModelSpec {
     engine_profile: String,
     #[serde(default)]
     specific_token_scores: bool,
+    /// Which surface the lettered readout uses on llama.cpp: `chat` (default)
+    /// sends the rendered question through `/v1/chat/completions` with the letter
+    /// system prompt, `native` keeps the raw `/completion` prompt. Ignored by the
+    /// other engine kinds, which have their own surfaces.
+    #[serde(default)]
+    lettered_surface: Option<String>,
     /// Minimum generic top-k to request when the exact-id path is unavailable.
     /// llama.cpp has no exact-id scoring, and its answer-slot distribution can
     /// place option labels far below the default k, so a model that needs this
@@ -117,6 +123,7 @@ impl Default for ModelSpec {
             chat_template: default_chat_template(),
             engine_profile: default_engine_profile(),
             specific_token_scores: false,
+            lettered_surface: None,
             top_k_floor: None,
         }
     }
@@ -193,6 +200,12 @@ fn question_label_seed(ctx: &Ctx, question: &Value) -> Option<u64> {
         .get("label_seed")
         .and_then(Value::as_u64)
         .or(ctx.label_seed)
+}
+
+/// The llama.cpp lettered surface: `native` opts out, everything else (including
+/// the default) uses the measured chat surface.
+fn lettered_chat_surface(lettered_surface: Option<&str>) -> bool {
+    !matches!(lettered_surface, Some("native"))
 }
 
 /// Width of the generic top-k read. The default keeps the historical floor of
@@ -1220,6 +1233,7 @@ async fn main() {
         spec.letter_system_prompt.clone(),
         spec.enable_thinking,
         spec.top_k_floor,
+        lettered_chat_surface(spec.lettered_surface.as_deref()),
     );
     let ctx = Arc::new(Ctx {
         engine,
