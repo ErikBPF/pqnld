@@ -533,6 +533,17 @@ fn build_report(arm: &str, fixture: &Path, metrics: Vec<Value>, refusals: usize)
         .iter()
         .filter_map(|m| m["inversions"].as_f64())
         .fold(0.0f64, f64::max);
+    // `flip_rate` and `inversions` are the worst question; the mean fields are the
+    // fixture-wide figures a report should quote, and `accuracy_mean` is their
+    // complement (agreement with the fixture's expected answers).
+    let mean = |field: &str| {
+        let values: Vec<f64> = metrics.iter().filter_map(|m| m[field].as_f64()).collect();
+        if values.is_empty() {
+            0.0
+        } else {
+            values.iter().sum::<f64>() / values.len() as f64
+        }
+    };
     json!({
         "schema": "pqnld-bias-probe-v1",
         "arm": arm,
@@ -543,7 +554,12 @@ fn build_report(arm: &str, fixture: &Path, metrics: Vec<Value>, refusals: usize)
         "refusals": refusals,
         "spread_p95": p95,
         "flip_rate": flips,
+        "flip_rate_max": flips,
+        "flip_rate_mean": mean("flip_rate"),
         "inversions": inversions,
+        "inversions_max": inversions,
+        "inversions_mean": mean("inversions"),
+        "accuracy_mean": 1.0 - mean("inversions"),
         "verdict_within_run": verdict(p95, flips, inversions, 0.0),
         "metrics": metrics,
     })

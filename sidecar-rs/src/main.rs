@@ -1219,6 +1219,7 @@ async fn main() {
         model.clone(),
         spec.letter_system_prompt.clone(),
         spec.enable_thinking,
+        spec.top_k_floor,
     );
     let ctx = Arc::new(Ctx {
         engine,

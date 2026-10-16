@@ -350,3 +350,59 @@ Follow-up this generates: the 14B row is the only configuration whose decisions 
 mostly stable (6% label flips). Whether that is family, prompt format or its task
 competence is not separable with one model per size; a same-family 14B or a second
 Qwen2.5 size would settle it.
+
+## Arm 8 — the path question answered: llama.cpp chat surface vs native raw prompt
+
+Same model (Qwen3.8-27B-UD-Q4_K_M), same 13-question fixture, same read width
+(`top_k_floor: 2048`), GPU, two identical runs, zero refusals — the only change is
+the surface: **llama.cpp's OpenAI-compatible `/v1/chat/completions` with the letter
+system prompt** instead of the native `/completion` raw prompt.
+
+| surface (same model, fixture, width) | accuracy | label flips | order flips | p95 | max δ_L | max δ_P | sup/unres/rej |
+|---|---:|---:|---:|---:|---:|---:|---|
+| native `/completion`, raw prompt | 0.84 | 0.22 | 0.09 | 0.76 | 0.61 | 0.18 | 0 / 5 / 8 |
+| chat `/v1/chat/completions` + letter system prompt | **0.99** | **0.03** | 0.00 | **0.08** | 0.16 | 0.06 | 7 / 5 / 1 |
+
+The raw prompt was the cause. Moving the same weights to the chat surface removes
+almost all of it: label flips fall 0.22 → 0.03, the p95 spread 0.76 → 0.08, and
+accuracy rises 0.84 → 0.99 with the fixture's expected answers unchanged. It also
+matches the vLLM arm's shape (which used this surface), so the earlier
+"letter wins on llama.cpp" result is a property of the *native raw-completion
+readout*, not of llama.cpp, not of quantisation and not of model size.
+
+Reaching the letters on the chat surface needed one fix: the OpenAI adapter
+clamped `top_logprobs` to the OpenAI API's 20, and declared that as its ceiling.
+It now honours the descriptor's `top_k_floor` (`openai_topk_size`, unit-tested), so
+an OpenAI-compatible server that accepts wider reads — llama.cpp maps the field to
+`n_probs` — gets read at the declared width.
+
+A residue remains and is not zero: δ_L 0.16 against δ_P 0.06, one rejected question
+in thirteen. Label sensitivity is reduced, not eliminated.
+
+## Arm 9 — 50-question fixture from the Decision Index corpus
+
+The kit's `sample-le26` rows (≤26 options, official expected answers) converted to
+the probe's fixture format: **50 questions**, k = {2:19, 3:21, 4:4, 6:1, 9:1, 11:4},
+SHA256 `5c9eb15bc45c94e293961d23b7b39d844d8058b2df8e45a75fab109c1ae9d5e5`, one run
+per configuration after the two-run identity established everywhere else.
+
+| configuration (llama.cpp native, GPU, floor 2048) | accuracy | label flips | order flips | p95 | max δ_L | max δ_P | sup/unres/rej |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Qwen3.8-27B UD-Q4_K_M | 0.68 | 0.20 | 0.12 | 0.97 | 0.74 | 0.34 | 0 / 24 / 26 |
+| Qwen2.5-14B Q4_K_M | 0.59 | 0.15 | 0.18 | 0.88 | 0.37 | 0.44 | 1 / 23 / 26 |
+| Qwen3.5-9B Q4_K_M | 0.47 | 0.46 | 0.16 | 0.61 | 0.32 | 0.24 | 0 / 1 / 49 |
+
+What the finer fixture changes and what it does not:
+
+- **Accuracy resolution.** 50 questions give 0.02 granularity, and accuracy is now
+  ordered by size (9B 0.47 < 14B 0.59 < 27B 0.68). Arm 7's reading — 14B ahead of
+  27B — does not survive the bigger fixture, which is exactly why the 13-question
+  figure was flagged as too coarse.
+- **Accuracy is dominated by option count, not by size.** On the 27B arm: k=2 0.87,
+  k=3 0.69, k=9 0.94, but k=4 0.25 and k=11 0.07. The fixture is a tool-selection
+  corpus whose hard rows are the wide ones; a single accuracy number hides that.
+- **Variance survives.** Every configuration still labels-flips at 0.15-0.46 and
+  δ_L ≥ δ_P in the 9B and 27B rows (14B is the exception, δ_P 0.44 > δ_L 0.37).
+- The arm-level `flip_rate`/`inversions` fields are the *worst* question; the probe
+  now also emits `flip_rate_mean`, `inversions_mean` and `accuracy_mean`, and every
+  figure in this section is a mean over questions.

@@ -146,6 +146,7 @@ pub fn build(
     model: String,
     system_prompt: String,
     enable_thinking: bool,
+    top_k_floor: Option<usize>,
 ) -> Arc<dyn Engine> {
     let endpoint = Endpoint {
         client,
@@ -159,7 +160,13 @@ pub fn build(
         EngineKind::Vllm => Arc::new(VllmEngine { endpoint }),
         EngineKind::LlamaCpp => Arc::new(LlamaCppEngine { endpoint }),
         EngineKind::Sglang => Arc::new(SglangEngine { endpoint }),
-        EngineKind::OpenAi => Arc::new(OpenAiEngine { endpoint }),
+        EngineKind::OpenAi => Arc::new(OpenAiEngine {
+            endpoint,
+            // The OpenAI API caps top_logprobs at 20. An OpenAI-compatible server
+            // that accepts wider reads (llama.cpp maps it to n_probs) declares the
+            // width in the descriptor, so honour it instead of refusing to look.
+            limit: top_k_floor.unwrap_or(20),
+        }),
     }
 }
 
@@ -490,6 +497,12 @@ impl Engine for SglangEngine {
 
 pub struct OpenAiEngine {
     endpoint: Endpoint,
+    limit: usize,
+}
+
+/// Top-k actually requested on the OpenAI-compatible chat surface.
+fn openai_topk_size(k: usize, limit: usize) -> usize {
+    k.min(limit)
 }
 
 impl Engine for OpenAiEngine {
@@ -499,7 +512,7 @@ impl Engine for OpenAiEngine {
             exact_ids: false,
             top_k: true,
             prompt_logprobs: true,
-            max_top_k: Some(20),
+            max_top_k: Some(self.limit),
             max_explicit_ids: None,
             surface: Surface::ChatCompletions,
         }
@@ -529,7 +542,7 @@ impl Engine for OpenAiEngine {
         Box::pin(async move {
             let request = self
                 .endpoint
-                .chat_body(prompt, json!({"top_logprobs": k.min(20)}));
+                .chat_body(prompt, json!({"top_logprobs": openai_topk_size(k, self.limit)}));
             let payload = self.endpoint.post_json("/v1/chat/completions", &request).await?;
             parse_chat_topk(&payload).ok_or_else(no_answer_slot)
         })
@@ -819,7 +832,7 @@ mod tests {
         });
         let client = reqwest::Client::builder().no_proxy()
             .timeout(std::time::Duration::from_secs(2)).build().unwrap();
-        (build(kind, client, url, "test".to_string(), "system".to_string(), false), server)
+        (build(kind, client, url, "test".to_string(), "system".to_string(), false, None), server)
     }
 
     #[tokio::test]
@@ -1007,6 +1020,17 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn openai_topk_size_honours_a_declared_wider_read() {
+        // The OpenAI API caps at 20; a declared floor raises it for compatible
+        // servers such as llama.cpp, whose chat endpoint maps it to n_probs.
+        assert_eq!(openai_topk_size(20, 20), 20);
+        assert_eq!(openai_topk_size(5, 20), 5);
+        assert_eq!(openai_topk_size(2048, 20), 20);
+        assert_eq!(openai_topk_size(2048, 2048), 2048);
+        assert_eq!(openai_topk_size(64, 2048), 64);
+    }
+
     fn openai_top_logprobs_response() {
         let payload = json!({
             "choices": [{"logprobs": {"content": [{
