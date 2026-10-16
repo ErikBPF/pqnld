@@ -421,6 +421,22 @@ fn lettered_surface_defaults_to_chat_and_allows_a_native_opt_out() {
 }
 
 #[test]
+fn capabilities_report_states_what_the_engine_cannot_do() {
+    // A llama.cpp-shaped engine: no exact ids, no prompt-logprob echo, top-k only.
+    let (ctx, _) = make_ctx(MockEngine::topk_only(&[("a", -0.1)]), ModelSpec::default());
+    let report = capabilities_report(&ctx);
+    assert_eq!(report["exact_ids"], json!(false));
+    assert_eq!(report["top_k"], json!(true));
+    assert_eq!(report["prompt_logprobs"], json!(false));
+    assert_eq!(report["unsupported"]["exact_token_ids"], json!(true));
+    assert_eq!(report["unsupported"]["prompt_logprob_echo"], json!(true));
+    assert_eq!(report["readout"], json!("auto"));
+    assert_eq!(report["letters"], json!(26));
+    assert_eq!(report["read_width_ladder"], json!([20, 512, 2048, 4096]));
+    assert_eq!(report["lettered_surface"], json!("chat"));
+}
+
+#[test]
 fn read_ladder_starts_at_the_declared_width_and_stops_at_the_cap() {
     assert_eq!(read_ladder(3, None), vec![20, 512, 2048, 4096]);
     assert_eq!(read_ladder(25, None), vec![25, 512, 2048, 4096]);

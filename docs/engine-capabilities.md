@@ -280,3 +280,8 @@ blocking gate for exact-ID shared serving on Apollo; see
 [mixed-readout-diagnosis.md](mixed-readout-diagnosis.md).
 Do not build a server-side SGLang `/v1/decisions` fast path yet — it is a
 different conditioning path and needs its own correctness evidence.
+
+**Operator recipe:** [running pqnld against llama.cpp](llamacpp-recipe.md) —
+launch, the readiness trap (`/health` is 200 while the model still loads), the
+descriptor, `GET /v1/capabilities`, and the refusals to expect. `--engine-kind auto`
+detects llama.cpp by probing `/props` before anything OpenAI-shaped.

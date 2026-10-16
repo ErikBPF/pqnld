@@ -68,3 +68,14 @@ decision-request JSON user message and answers it as a decision.
 
 **Why `pqnld`?**
 Parallel Query Node, Logit Decisions.
+
+## Can I run this against llama.cpp?
+
+Yes — it is a supported engine, with a worked recipe in
+[llamacpp-recipe.md](llamacpp-recipe.md). Two things differ from vLLM: there is no
+exact-token-id scoring, so the readout reads a top-k window and widens itself
+(20 → 512 → 2048 → 4096) until every option label is visible; and the lettered
+readout uses the chat surface by default because the raw completion prompt
+produced far more label-driven decisions on identical weights. `GET
+/v1/capabilities` states exactly what the running engine can and cannot do, and
+more than 26 options are refused because llama.cpp has no prompt-logprob echo path.

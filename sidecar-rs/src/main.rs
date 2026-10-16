@@ -202,6 +202,33 @@ fn question_label_seed(ctx: &Ctx, question: &Value) -> Option<u64> {
         .or(ctx.label_seed)
 }
 
+/// What the running engine can and cannot do, for operators and for tests.
+fn capabilities_report(ctx: &Ctx) -> Value {
+    let caps = ctx.engine.capabilities();
+    json!({
+        "engine": match caps.surface {
+            engine::Surface::ChatCompletions => "chat-completions",
+            engine::Surface::Completions => "completions",
+            engine::Surface::NativeGenerate => "native-generate",
+            engine::Surface::Score => "score",
+        },
+        "tokenize": caps.tokenize,
+        "exact_ids": caps.exact_ids,
+        "top_k": caps.top_k,
+        "prompt_logprobs": caps.prompt_logprobs,
+        "max_top_k": caps.max_top_k,
+        "read_width_start": topk_request_size(0, ctx.spec.top_k_floor),
+        "read_width_ladder": read_ladder(0, ctx.spec.top_k_floor),
+        "lettered_surface": if lettered_chat_surface(ctx.spec.lettered_surface.as_deref()) { "chat" } else { "native" },
+        "readout": ctx.spec.readout,
+        "letters": ctx.spec.letters.chars().count(),
+        "unsupported": {
+            "exact_token_ids": !caps.exact_ids,
+            "prompt_logprob_echo": !caps.prompt_logprobs,
+        },
+    })
+}
+
 /// The llama.cpp lettered surface: `native` opts out, everything else (including
 /// the default) uses the measured chat surface.
 fn lettered_chat_surface(lettered_surface: Option<&str>) -> bool {
@@ -1127,6 +1154,7 @@ async fn route(req: Request<Incoming>, ctx: Arc<Ctx>) -> Response<Full<Bytes>> {
     let path = req.uri().path().to_string();
     match (method.as_str(), path.as_str()) {
         ("GET", "/healthz") => json_response(200, json!({"status": "ok"})),
+        ("GET", "/v1/capabilities") => json_response(200, capabilities_report(&ctx)),
         ("POST", "/v1/systemone") | ("POST", "/v1/decide") => match req.into_body().collect().await {
             Ok(body) => handle_decide(ctx, body.to_bytes()).await,
             Err(e) => error_response(400, format!("bad request: {e}")),
@@ -1315,7 +1343,9 @@ async fn main() {
     let bind = format!("{host}:{port}");
     let listener = TcpListener::bind(&bind).await.expect("bind tcp");
     eprintln!(
-        "decision readout on http://{bind}/v1/decide -> {engine_url} (readout={mode_name})"
+        "decision readout on http://{bind}/v1/decide -> {engine_url} \
+         (readout={mode_name}, capabilities={})",
+        capabilities_report(&ctx)
     );
     let ctx = ctx.clone();
     tokio::spawn(async move { accept_tcp(listener, ctx).await });

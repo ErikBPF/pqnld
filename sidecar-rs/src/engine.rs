@@ -115,6 +115,14 @@ pub fn parse_kind(value: &str) -> Option<EngineKind> {
 
 /// Best-effort startup probe used by `--engine-kind auto`.
 pub async fn detect_kind(client: &reqwest::Client, base_url: &str) -> EngineKind {
+    // llama-server answers /props with a llama.cpp-specific shape and exposes
+    // /tokenize; check that before anything that could look OpenAI-shaped.
+    if let Some(props) = get_json(client, base_url, "/props").await {
+        let text = props.to_string().to_lowercase();
+        if text.contains("total_slots") || text.contains("chat_template") {
+            return EngineKind::LlamaCpp;
+        }
+    }
     if let Some(value) = get_json(client, base_url, "/openapi.json").await {
         let text = value.to_string().to_lowercase();
         if text.contains("sglang") {

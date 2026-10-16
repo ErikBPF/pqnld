@@ -65,9 +65,11 @@ cargo build --release --manifest-path sidecar-rs/Cargo.toml
 ```
 
 This quickstart uses the live-tested vLLM adapter. llama.cpp's native top-k
-surface is live-tested as well: it needs a `top_k_floor` in the descriptor and
-reads the lettered answer slot through the chat surface by default (the raw prompt
-triples the label-driven flip rate on the same weights); see
+surface is live-tested as well: the readout widens its own top-k window until every
+option label is visible, reads the lettered answer slot through the chat surface by
+default (the raw prompt triples the label-driven flip rate on the same weights), and
+`GET /v1/capabilities` states the limits; see
+[the llama.cpp recipe](docs/llamacpp-recipe.md) and
 [engine capabilities](docs/engine-capabilities.md). Other backend support is
 documented in [engine capabilities](docs/engine-capabilities.md).
 
