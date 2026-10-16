@@ -427,3 +427,52 @@ What the finer fixture changes and what it does not:
 - The arm-level `flip_rate`/`inversions` fields are the *worst* question; the probe
   now also emits `flip_rate_mean`, `inversions_mean` and `accuracy_mean`, and every
   figure in this section is a mean over questions.
+
+## Arm 11 — the sweep re-run under the shipping default (chat surface)
+
+Same seven configurations, the same descriptor files, the same fixtures as Arm 7/9 —
+only the surface changed, from the raw `/completion` prompt to the chat surface that
+is now the default. One run per configuration (two-run identity was established in
+seven configurations already).
+
+13-question fixture:
+
+| configuration | accuracy | label flips | order flips | p95 | max δ_L | max δ_P | sup/unres/rej |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Qwen2.5-3B Q4_K_M | 0.81 | 0.16 | 0.07 | 1.00 | 0.48 | 0.14 | 2 / 5 / 6 |
+| Qwen3.5-9B Q4_K_M | 0.99 | 0.02 | 0.00 | 0.38 | 0.19 | 0.10 | 3 / 9 / 1 |
+| Qwen3.5-9B Q8_0 | 0.99 | 0.03 | 0.00 | 0.35 | 0.23 | 0.06 | 1 / 11 / 1 |
+| Qwen2.5-14B Q4_K_M | 0.99 | 0.00 | 0.02 | 0.04 | 0.01 | 0.08 | 10 / 3 / 0 |
+| Qwen3.8-27B UD-IQ4_XS | 1.00 | 0.00 | 0.00 | 0.07 | 0.11 | 0.03 | 6 / 7 / 0 |
+| Qwen3.8-27B UD-Q4_K_M | 0.99 | 0.03 | 0.00 | 0.08 | 0.16 | 0.06 | 7 / 5 / 1 |
+| Qwen3.8-27B UD-Q4_K_XL | 1.00 | 0.00 | 0.00 | 0.12 | 0.11 | 0.06 | 7 / 6 / 0 |
+
+50-question Decision Index fixture (0.02 accuracy granularity):
+
+| configuration | accuracy | label flips | order flips | p95 | max δ_L | max δ_P | sup/unres/rej |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Qwen3.5-9B Q4_K_M | 0.69 | 0.10 | 0.06 | 0.51 | 0.24 | 0.22 | 1 / 31 / 18 |
+| Qwen2.5-14B Q4_K_M | 0.65 | 0.07 | 0.11 | 1.00 | 0.32 | 0.49 | 26 / 8 / 16 |
+| Qwen3.8-27B UD-Q4_K_M | 0.75 | 0.05 | 0.05 | 0.34 | 0.10 | 0.15 | 15 / 27 / 8 |
+
+What the default changes, stated against Arm 7/9 (same configurations, raw prompt):
+
+- **Label-driven decisions are gone for every configuration at 9B and above**:
+  label flips fall from 0.15-0.46 to 0.00-0.03 on the 13-question fixture and to
+  0.05-0.10 on the harder 50-question one. The 3B model remains the outlier
+  (accuracy 0.81, label flips 0.16, p95 1.00) — below some size, the answer slot is
+  not stable enough for a single-token readout.
+- **Accuracy becomes the differentiator, and 27B leads**: 0.75 on the 50-question
+  corpus against 0.69 (9B) and 0.65 (14B), with 27B also complete on the 13-question
+  fixture (1.00 for two of its three quants). 9B and 14B swap places between
+  surfaces, and both are within about two questions of each other, so only the 27B
+  lead is worth stating.
+- **Order effects do not disappear**: 14B on the hard corpus is order-dominated
+  (δ_P 0.49 against δ_L 0.32, p95 1.00) while its 13-question behaviour is the
+  calmest of the set. Position sensitivity is a separate axis from the letter
+  effect and needs its own fixture attention.
+- Quantisation still does not matter at 27B (0.99/1.00 accuracy across IQ4_XS,
+  Q4_K_M, Q4_K_XL; zero label flips in two of the three).
+
+The earlier tables in this file stay as the record of what the raw prompt did; this
+section is what the shipped configuration does.
