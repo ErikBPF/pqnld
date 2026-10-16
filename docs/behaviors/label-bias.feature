@@ -89,6 +89,28 @@ Feature: Label invariance and engine readout validation
     Or the request is refused
     And a decision is never returned from a truncated score set
 
+  Scenario: The generic read widens itself until every label is visible
+    Given an engine without exact token id scoring
+    And a descriptor that declares no top-k floor
+    When a question's option labels fall outside the first read width
+    Then the readout retries at the next documented width
+    And it names each escalation while it does
+    And it returns a complete distribution once every label is visible
+
+  Scenario: A refusal names what was tried and what would help
+    Given every documented read width failed to see all option labels
+    When a client requests that decision
+    Then the refusal names the missing labels
+    And it names the widths that were tried
+    And it names the descriptor fields that could change the outcome
+
+  Scenario: The llama.cpp lettered readout uses the chat surface by default
+    Given a llama.cpp engine and a descriptor without a lettered surface
+    When a client requests a lettered decision
+    Then the request is sent to the chat completions surface with the letter
+      system prompt
+    And a descriptor that declares the native surface keeps the raw prompt path
+
   Scenario: Two engines agree on the decision for the same prompt
     Given identical fixtures, prompts and pinned model files on two engines
     When the probe runs both arms sequentially
