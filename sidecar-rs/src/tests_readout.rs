@@ -421,6 +421,15 @@ fn lettered_surface_defaults_to_chat_and_allows_a_native_opt_out() {
 }
 
 #[test]
+fn read_ladder_starts_at_the_declared_width_and_stops_at_the_cap() {
+    assert_eq!(read_ladder(3, None), vec![20, 512, 2048, 4096]);
+    assert_eq!(read_ladder(25, None), vec![25, 512, 2048, 4096]);
+    assert_eq!(read_ladder(3, Some(512)), vec![512, 2048, 4096]);
+    assert_eq!(read_ladder(3, Some(4096)), vec![4096]);
+    assert_eq!(read_ladder(300, Some(64)), vec![300, 512, 2048, 4096]);
+}
+
+#[test]
 fn question_label_seed_prefers_the_question_value() {
     let ctx = make_seeded_ctx(2);
     assert_eq!(question_label_seed(&ctx, &json!({"label_seed": 3})), Some(3));

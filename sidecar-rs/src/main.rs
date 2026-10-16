@@ -208,6 +208,21 @@ fn lettered_chat_surface(lettered_surface: Option<&str>) -> bool {
     !matches!(lettered_surface, Some("native"))
 }
 
+/// Read widths to try on the generic top-k path, narrowest first. The engine has
+/// no exact-id scoring here, so a label the server ranks below the read width is
+/// simply invisible; a bounded ladder finds the width the model actually needs
+/// instead of refusing a question that a wider read would answer.
+fn read_ladder(options: usize, floor: Option<usize>) -> Vec<usize> {
+    let start = topk_request_size(options, floor);
+    let mut ladder = vec![start];
+    for step in [512usize, 2048, 4096] {
+        if step > start {
+            ladder.push(step);
+        }
+    }
+    ladder
+}
+
 /// Width of the generic top-k read. The default keeps the historical floor of
 /// 20; an exact-id-less engine (llama.cpp) can declare a wider read because its
 /// answer-slot distribution may rank option labels far below the default.
@@ -531,24 +546,38 @@ async fn letter_scores(
                 }
             }
         } else {
-            let scores = ctx
-                .engine
-                .topk(&body, topk_request_size(keys.len(), ctx.spec.top_k_floor))
-                .await?;
-            if top_token.is_none() {
-                let mut best: Option<(f64, String)> = None;
-                for (token, logprob) in &scores {
-                    if best.as_ref().map(|(b, _)| *logprob > *b).unwrap_or(true) {
-                        best = Some((*logprob, token.clone()));
+            let ladder = read_ladder(keys.len(), ctx.spec.top_k_floor);
+            let last = *ladder.last().expect("the ladder is never empty");
+            for width in ladder {
+                let scores = ctx.engine.topk(&body, width).await?;
+                if top_token.is_none() {
+                    let mut best: Option<(f64, String)> = None;
+                    for (token, logprob) in &scores {
+                        if best.as_ref().map(|(b, _)| *logprob > *b).unwrap_or(true) {
+                            best = Some((*logprob, token.clone()));
+                        }
+                    }
+                    top_token = best.map(|(_, token)| token);
+                }
+                let mut found: HashMap<String, f64> = HashMap::new();
+                for (token, logprob) in scores {
+                    if let Some(label) = letter_of(&token) {
+                        if option_labels.contains(&label) {
+                            found.entry(label).or_insert(logprob);
+                        }
                     }
                 }
-                top_token = best.map(|(_, token)| token);
-            }
-            for (token, logprob) in scores {
-                if let Some(label) = letter_of(&token) {
-                    if option_labels.contains(&label) {
-                        by_label.entry(label).or_insert(logprob);
-                    }
+                let complete = option_labels.iter().all(|l| found.contains_key(l));
+                by_label = found;
+                if complete {
+                    break;
+                }
+                if width != last {
+                    eprintln!(
+                        "readout: width {width} saw {} of {} option labels, escalating to the next rung",
+                        by_label.len(),
+                        option_labels.len()
+                    );
                 }
             }
         }
@@ -562,8 +591,15 @@ async fn letter_scores(
         .collect();
     if !missing.is_empty() {
         return Err(EngineError::Unsupported(format!(
-            "answer-slot logprobs missing option labels: {}",
-            missing.join(", ")
+            "answer-slot logprobs missing option labels: {} (generic top-k read at widths \
+             {ladder}; raise the descriptor's top_k_floor, or use the chat surface via \
+             lettered_surface for the lettered readout)",
+            missing.join(", "),
+            ladder = read_ladder(keys.len(), ctx.spec.top_k_floor)
+                .iter()
+                .map(|w| w.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         )));
     }
     let scores: Vec<f64> = option_labels.iter().map(|l| by_label[l]).collect();

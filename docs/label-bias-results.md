@@ -275,6 +275,27 @@ Same shape, 16.46 GB across both cards, two runs, 0 refusals, bit-identical:
 A CPU run of the same model (single run, interrupted by the GPU stage, 34
 refusals) gives the same shape: p95 0.780, flips 0.750, inversions 0.375.
 
+## Arm 10 — read-width ladder (no descriptor tuning needed)
+
+The generic top-k path now escalates instead of refusing: it starts at
+`max(options, 20)` (or the descriptor's `top_k_floor`) and retries at 512, 2048 and
+4096 while option labels are missing, logging each rung, and refuses only if the
+widest rung still cannot see every label. Validated on the same 27B trial with
+descriptors that declare **no** `top_k_floor`:
+
+| surface | refusals | escalations | accuracy | label flips | p95 |
+|---|---:|---:|---:|---:|---:|
+| native `/completion` raw prompt | 0 | 214 | 0.84 | 0.22 | 0.758 |
+| chat `/v1/chat/completions` (default) | 0 | 104 | 0.99 | 0.03 | 0.084 |
+
+Both match the fixed-2048 arms exactly, so the ladder changes coverage, not
+results, and `top_k_floor` is now an override for the starting rung rather than a
+requirement. A first attempt at this ladder was wrong in a way worth recording: its
+loop compared the current rung against itself, so it never escalated while its
+refusal message claimed four widths had been tried. A direct engine probe (same
+prompt, widths 512/2048/2048/4096/4096) showed the server returning every label
+each time, which located the fault in the client, not the engine.
+
 ## Cross-engine comparison, and the corrected reading
 
 | Engine / readout | Model | p95 | label flips | position flips | verdicts |

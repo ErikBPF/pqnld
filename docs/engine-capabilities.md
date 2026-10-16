@@ -244,6 +244,15 @@ use top-k (chat) or echo (legacy completions, `logprobs<=5`).
 | SGLang | exact IDs / top-k | `/generate` `token_ids_logprob`; `/v1/score` `label_token_ids` | `/tokenize` | `/generate` `logprob_start_len:0` |
 | OpenAI | top-k | — | none | legacy `/v1/completions` `echo:true`, `logprobs<=5` |
 
+Resolved 2026-10-16 (llama.cpp read width): the generic top-k readout
+**escalates** instead of refusing. It starts at `max(options, 20)` (or the
+descriptor's `top_k_floor`) and retries at 512, 2048 and 4096 while labels are
+missing, logging each rung. Measured on the 27B trial: a descriptor with no
+`top_k_floor` previously refused those questions at the default width; with the
+ladder both surfaces complete with zero refusals and the same numbers as a fixed
+2048-wide read (native accuracy 0.84 / p95 0.758, chat 0.99 / 0.084). `top_k_floor`
+is now an override for the starting rung, not a requirement.
+
 Resolved 2026-10-15 (llama.cpp lettered surface): the lettered readout defaults
 to the **chat** surface (`/v1/chat/completions` with `letter_system_prompt`), not
 the native raw prompt. On identical weights (27B UD-Q4_K_M, 13-question fixture,

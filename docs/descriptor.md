@@ -27,7 +27,7 @@ without breaking.
 | `engine_profile` | `"full"` | Metadata only; pqnld does not configure the engine from this field |
 | `specific_token_scores` | `false` | Opt into explicit label-token ID scoring with a compatible adapter |
 | `lettered_surface` | `"chat"` | llama.cpp only: `"chat"` reads the lettered answer slot through `/v1/chat/completions` with `letter_system_prompt`; `"native"` keeps the raw `/completion` prompt. Measured on identical weights: chat gives ~8x fewer label-driven flips and ~10x tighter spread than the raw prompt; ignored by the other engine kinds |
-| `top_k_floor` | `null` | Minimum generic top-k to request when the exact-id path is unavailable. `null` keeps the historical floor of 20 (`max(options, 20)`); an adapter without exact-id scoring (llama.cpp) may need a much wider read because its answer slot can rank option labels far below the default |
+| `top_k_floor` | `null` | *Starting* width for the generic top-k read when the exact-id path is unavailable (`null` = `max(options, 20)`). The readout then escalates on its own: while option labels are missing it retries at 512, 2048 and 4096, logging each escalation, and refuses only if the widest rung still cannot see every label. Setting this field skips the narrower rungs |
 
 ## Readout modes
 
