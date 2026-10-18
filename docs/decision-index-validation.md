@@ -3,7 +3,7 @@
 ## Current evaluation
 
 The pinned Rust release completed **100/100 sampled requests, 760 questions,
-zero errors or refusals** against `qwen38-27b-nvfp4`. The
+zero errors or refusals** against a served 27B NVFP4 model. The
 [quality report](decision-index-quality.md) records task metrics, denominators,
 timing and comparison limits.
 
@@ -25,14 +25,14 @@ inference endpoint.
 
 - Scorer: `decision-index==0.2.1`, clean kit commit
   `87d4650b42b377c0291a89c1f1a879f9b31082bf`; suite corpus edition `release-v2.1`.
-- [Execution receipt](quality-evidence/fresh-result-20261002.json) pins the source
+- An execution receipt (kept privately) pins the source
   archive, running release binary, task descriptor, sample, suite inputs and
   scorer files with full hashes. Model API identity is recorded, but a
   weight-content hash and stable engine-epoch attestation are not established.
 - Original structured JSON instructions and descriptions are preserved. All
   100 requests passed input validation; no input transformation, dropped rows,
   tuning or training occurred.
-- [Suite verification](quality-evidence/offline-score-20261002.json) confirms
+- Suite verification (kept privately) confirms
   uncompressed corpus content, additions, exclusions and subsets. The selected
   gzip hash differs from the manifest's compressed hash; matching content is
   accepted by the official verifier. The input is not rewritten to hide that.
@@ -42,7 +42,7 @@ inference endpoint.
 - [Runtime scheduling](../sidecar-rs/README.md#scheduling) owns worker ordering,
   concurrency and cancellation. The run used one worker and a blank sidecar
   cache; shared engine cache/load and direct chat were not isolated.
-- [Answer comparison](quality-evidence/fresh-comparison-20261002.json) matches all
+- Answer comparison (kept privately) matches all
   100 payloads and 760 answers. Observed parity is not a serving-determinism
   guarantee. Repeatability claims need controlled engine epoch, batch/load and
   cache state as well as pinned inputs and binaries.
@@ -63,14 +63,13 @@ capacity or [shared-chat/MTP readiness](mixed-readout-diagnosis.md).
 
 ## Evidence locations and privacy
 
-Apollo root `/mnt/data/ai/validation/decision-index-2026-10-01` is `/work` in
-`dibuild`: sample `/work/sample-100.jsonl.gz`, suite `/work/suite`, kit `/work/kit`,
+The Decision Index kit checkout is `/work` in the build container: sample `/work/sample-100.jsonl.gz`, suite `/work/suite`, kit `/work/kit`,
 interpreter `/work/venv/bin/python` (Python 3.12.3). Pinned source/binary paths are
 in the execution receipt; fresh output is `/work/runs/http-repaired-sample100-20261002`.
-The [executed command receipt](quality-evidence/fresh-command-receipt-20261002.txt)
+The executed command receipt (kept privately)
 records the completed authorized evaluation, not permission for another run.
 
-Raw rows, responses, labels and logs stay Apollo-private: directories `0700`,
+Raw rows, responses, labels and logs stay private to the operator: directories `0700`,
 files `0600`. Published evidence contains aggregate metrics, counts and hashes
 only. Evaluation is not training; the kit's MIT license grants no constituent
 corpus redistribution rights. No dataset is copied locally.

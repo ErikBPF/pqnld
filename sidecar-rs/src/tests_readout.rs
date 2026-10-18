@@ -382,8 +382,94 @@ pub(super) fn make_ctx(engine: MockEngine, spec: ModelSpec) -> (Arc<Ctx>, Arc<Mo
         label_ids: Arc::new(Mutex::new(HashMap::new())),
         sem: Arc::new(Semaphore::new(1)),
         workers: 1,
+        label_seed: None,
     });
     (ctx, engine)
+}
+
+fn make_seeded_ctx(seed: u64) -> Arc<Ctx> {
+    let (ctx, _) = make_ctx(MockEngine::topk_only(&[("a", -0.1)]), ModelSpec::default());
+    Arc::new(Ctx {
+        engine: ctx.engine.clone(),
+        model: ctx.model.clone(),
+        spec: ctx.spec.clone(),
+        temperature: ctx.temperature,
+        batch: ctx.batch,
+        extended: ctx.extended.clone(),
+        mode: ctx.mode.clone(),
+        cache: ctx.cache.clone(),
+        label_ids: ctx.label_ids.clone(),
+        sem: ctx.sem.clone(),
+        workers: ctx.workers,
+        label_seed: Some(seed),
+    })
+}
+
+#[test]
+fn top_k_request_size_keeps_the_default_floor_and_honours_a_declared_one() {
+    assert_eq!(topk_request_size(3, None), 20);
+    assert_eq!(topk_request_size(25, None), 25);
+    assert_eq!(topk_request_size(3, Some(512)), 512);
+    assert_eq!(topk_request_size(300, Some(64)), 300);
+}
+
+#[test]
+fn lettered_surface_defaults_to_chat_and_allows_a_native_opt_out() {
+    assert!(lettered_chat_surface(None));
+    assert!(lettered_chat_surface(Some("chat")));
+    assert!(!lettered_chat_surface(Some("native")));
+}
+
+#[test]
+fn capabilities_report_states_what_the_engine_cannot_do() {
+    // A llama.cpp-shaped engine: no exact ids, no prompt-logprob echo, top-k only.
+    let (ctx, _) = make_ctx(MockEngine::topk_only(&[("a", -0.1)]), ModelSpec::default());
+    let report = capabilities_report(&ctx);
+    assert_eq!(report["exact_ids"], json!(false));
+    assert_eq!(report["top_k"], json!(true));
+    assert_eq!(report["prompt_logprobs"], json!(false));
+    assert_eq!(report["unsupported"]["exact_token_ids"], json!(true));
+    assert_eq!(report["unsupported"]["prompt_logprob_echo"], json!(true));
+    assert_eq!(report["readout"], json!("auto"));
+    assert_eq!(report["letters"], json!(26));
+    assert_eq!(report["read_width_ladder"], json!([20, 512, 2048, 4096]));
+    assert_eq!(report["lettered_surface"], json!("chat"));
+}
+
+#[test]
+fn read_ladder_starts_at_the_declared_width_and_stops_at_the_cap() {
+    assert_eq!(read_ladder(3, None), vec![20, 512, 2048, 4096]);
+    assert_eq!(read_ladder(25, None), vec![25, 512, 2048, 4096]);
+    assert_eq!(read_ladder(3, Some(512)), vec![512, 2048, 4096]);
+    assert_eq!(read_ladder(3, Some(4096)), vec![4096]);
+    assert_eq!(read_ladder(300, Some(64)), vec![300, 512, 2048, 4096]);
+}
+
+#[test]
+fn question_label_seed_prefers_the_question_value() {
+    let ctx = make_seeded_ctx(2);
+    assert_eq!(question_label_seed(&ctx, &json!({"label_seed": 3})), Some(3));
+    assert_eq!(question_label_seed(&ctx, &json!({})), Some(2));
+    let (unseeded, _) = make_ctx(MockEngine::topk_only(&[("a", -0.1)]), ModelSpec::default());
+    assert_eq!(question_label_seed(&unseeded, &json!({})), None);
+    assert_eq!(question_label_seed(&unseeded, &json!({"label_seed": 1})), Some(1));
+}
+
+#[test]
+fn seeded_binding_moves_the_label_not_the_option_order() {
+    let keys: Vec<String> = ["red", "blue", "green"].iter().map(|k| k.to_string()).collect();
+    let base: Vec<String> = ["a", "b", "c"].iter().map(|k| k.to_string()).collect();
+    let question = choice("Which colour is named?", &["red", "blue", "green"]);
+    let state = Value::String("The car is blue.".to_string());
+
+    let shifted = render_lettered(&state, &question, &keys, &labels::permuted(base.clone(), 2));
+    assert!(shifted.contains("c) red"), "{shifted}");
+    assert!(shifted.contains("a) blue"), "{shifted}");
+    assert!(shifted.contains("b) green"), "{shifted}");
+    assert!(shifted.find("c) red").unwrap() < shifted.find("a) blue").unwrap());
+
+    let unshifted = render_lettered(&state, &question, &keys, &base);
+    assert!(unshifted.contains("a) red"), "{unshifted}");
 }
 
 fn choice(instructions: &str, criteria: &[&str]) -> Value {

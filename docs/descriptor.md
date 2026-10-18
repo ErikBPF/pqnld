@@ -26,6 +26,8 @@ without breaking.
 | `chat_template` | Qwen3.8 ChatML with an empty thinking block | Used by the echo fallback to build the raw context. `{system}` and `{body}` are substituted. Set to `null` only if you will not use echo |
 | `engine_profile` | `"full"` | Metadata only; pqnld does not configure the engine from this field |
 | `specific_token_scores` | `false` | Opt into explicit label-token ID scoring with a compatible adapter |
+| `lettered_surface` | `"chat"` | llama.cpp only: `"chat"` reads the lettered answer slot through `/v1/chat/completions` with `letter_system_prompt`; `"native"` reads the raw `/completion` prompt instead. Ignored by the other engine kinds, which have their own surfaces |
+| `top_k_floor` | `null` | *Starting* width for the generic top-k read when the exact-id path is unavailable (`null` = `max(options, 20)`). The readout then escalates on its own: while option labels are missing it retries at 512, 2048 and 4096, logging each escalation, and refuses only if the widest rung still cannot see every label. Setting this field skips the narrower rungs |
 
 ## Readout modes
 

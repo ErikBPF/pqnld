@@ -31,12 +31,16 @@ See [wire contract](wire.md) and [implementation](../sidecar-rs/src/main.rs).
 - Scoring and probes share a [worker budget](../sidecar-rs/README.md#scheduling).
   Ordering, concurrency and cancellation have one documented operating contract.
 - [Engine adapters](engine-capabilities.md) exist for vLLM, llama.cpp, SGLang and
-  OpenAI. vLLM is live-tested; other adapters have compile and parser-unit coverage.
+  OpenAI. vLLM and llama.cpp are live-tested; SGLang and OpenAI have compile and
+  parser-unit coverage. llama.cpp's lettered readout uses the chat surface with the
+  letter system prompt (`lettered_surface: "native"` selects the raw completion
+  prompt), and its read width widens itself until every option label is visible, so
+  a descriptor needs no `top_k_floor`.
 
 ## Latest verification
 
-- [Reliability receipts](reliability-evidence/receipt.md) and
-  [final Apollo verification](reliability-evidence/apollo-merge-validation.txt):
+- Reliability receipts (kept privately) and
+  final verification (kept privately):
   **47 tests in each debug/release profile** (46 unit + one integration).
   Formatter/Clippy components are unavailable; the homelab prerequisite gate is blocked.
 

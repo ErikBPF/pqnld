@@ -1,9 +1,9 @@
 # Strict readout smoke baseline
 
-Measured 2026-09-27 against Apollo's existing engine at its tailnet-bound
-port 11542 through a temporary SSH tunnel. Model request ID:
-`qwen38-27b-nvfp4`. Engine revision and checkpoint digest were not independently
-captured; this is a diagnostic smoke run, not a reproducible quality benchmark.
+Measured 2026-09-27 against the evaluation host's existing engine through a
+temporary SSH tunnel. Model request ID: `qwen38-27b-nvfp4`. Engine revision and
+checkpoint digest were not independently captured; this is a diagnostic smoke run,
+not a reproducible quality benchmark.
 
 The local working tree used strict letter recognition, complete-label coverage,
 and order-sensitive caching on top of `f541536`. No deployment or engine flags

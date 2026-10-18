@@ -8,9 +8,8 @@ research below is not a promise of live adapter compatibility.
 
 ## Method and evidence
 
-- **vLLM 0.30.0 (Apollo, `qwen38-27b-nvfp4`)** was read live, read-only: the
-  running server's `GET http://100.77.14.27:11542/openapi.json` and the installed
-  package under `apollo:/usr/local/lib/python3.12/dist-packages/vllm/`. The
+- **vLLM 0.30.0** was read live, read-only: the running server's
+  `GET /openapi.json` and the installed vLLM package. The
   container command carries no `--max-logprobs`, so the default 20 applies.
   Public reference: <https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html>.
 - **llama.cpp** `tools/server/README.md` and `tools/server/server-common.cpp`,
@@ -244,11 +243,37 @@ use top-k (chat) or echo (legacy completions, `logprobs<=5`).
 | SGLang | exact IDs / top-k | `/generate` `token_ids_logprob`; `/v1/score` `label_token_ids` | `/tokenize` | `/generate` `logprob_start_len:0` |
 | OpenAI | top-k | — | none | legacy `/v1/completions` `echo:true`, `logprobs<=5` |
 
+llama.cpp read width: the generic top-k readout **escalates**. It starts at
+`max(options, 20)` (or the descriptor's `top_k_floor`, which therefore only sets the
+starting rung) and retries at 512, 2048 and 4096 while option labels are missing,
+logging each rung, and refuses only if the widest rung still cannot see every label.
+
+llama.cpp lettered surface: the readout uses the **chat** surface
+(`/v1/chat/completions` with `letter_system_prompt`). `lettered_surface: "native"`
+selects the raw `/completion` prompt instead. The OpenAI-shaped request honours
+`top_k_floor` rather than clamping `top_logprobs` at the API's default of 20, which
+is what makes the answer-slot letters reachable on such a server.
+
+Resolved 2026-10-13 (llama.cpp): the adapter is **live-verified** against the
+pinned `ggml-org/llama.cpp` image for the native top-k surface —
+`/tokenize` → one id per label, `/completion` `n_probs` accepted at 8/20/64/256
+with exactly that many `top_logprobs` returned (no hard cap), `/props` and
+`/health` present, and fail-closed refusal when a label is missing. Coverage is
+model-dependent: on a model whose answer slot ranks labels deep, the required read
+width lies well above the default 20, which is what the escalation ladder covers.
+Exact-id scoring is still unavailable and refused honestly; >26 options still route
+to the echo path and are refused.
+
 Unresolved / to verify before claiming live adapter support: SGLang's OpenAI
 chat coverage for top-k (`top_logprobs`) under reasoning models; whether OpenAI's
-newer reasoning models accept `logprobs`/`top_logprobs` at all; llama.cpp `n_probs`
-behaviour at very large k. The vLLM explicit-ID defect under MTP remains the
-blocking gate for exact-ID shared serving on Apollo; see
+newer reasoning models accept `logprobs`/`top_logprobs` at all; the read width
+needed on a task-competent llama.cpp model. The vLLM explicit-ID defect under MTP remains the
+blocking gate for exact-ID shared serving on the evaluation host; see
 [mixed-readout-diagnosis.md](mixed-readout-diagnosis.md).
 Do not build a server-side SGLang `/v1/decisions` fast path yet — it is a
 different conditioning path and needs its own correctness evidence.
+
+**Operator recipe:** [running pqnld against llama.cpp](llamacpp-recipe.md) —
+launch, the readiness trap (`/health` is 200 while the model still loads), the
+descriptor, `GET /v1/capabilities`, and the refusals to expect. `--engine-kind auto`
+detects llama.cpp by probing `/props` before anything OpenAI-shaped.

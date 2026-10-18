@@ -1,0 +1,122 @@
+name: llama.cpp live lane
+
+# Slice L4 of the official llama.cpp support plan: a live lane that would fail if
+# the llama.cpp adapter, the read-width ladder or the capability report changed
+# behaviour. It builds llama-server from a pinned tag (a tag pins the commit, so
+# no artifact hash has to be trusted), downloads one small GGUF verified against a
+# pinned sha256, and drives pqnld through its own probe.
+#
+# Model-download policy: the lane fetches 1.1 GB from Hugging Face, hash-pinned. If
+# a mirror or an offline runner is preferred, vendor the file and set PQNLD_CI_GGUF
+# to its path; the hash check still applies.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'sidecar-rs/**'
+      - '.github/workflows/llamacpp-live.yml'
+  workflow_dispatch:
+
+env:
+  LLAMACPP_TAG: v0.7.0
+  GGUF_URL: https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf
+  GGUF_SHA256: 6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
+  ENGINE_PORT: 8080
+  SIDECAR_PORT: 11560
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Toolchain for llama.cpp
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake ninja-build build-essential
+      - name: Cache llama.cpp build
+        uses: actions/cache@v4
+        with:
+          path: ~/llama.cpp/build
+          key: llamacpp-${{ env.LLAMACPP_TAG }}-${{ runner.arch }}
+      - name: Build llama-server from the pinned tag
+        run: |
+          set -euo pipefail
+          if [ ! -x ~/llama.cpp/build/bin/llama-server ]; then
+            git clone --depth 1 --branch "$LLAMACPP_TAG" https://github.com/ggml-org/llama.cpp ~/llama.cpp
+            cmake -S ~/llama.cpp -B ~/llama.cpp/build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF
+            cmake --build ~/llama.cpp/build --target llama-server -j "$(nproc)"
+          fi
+          ~/llama.cpp/build/bin/llama-server --version
+      - name: Fetch and verify the model
+        run: |
+          set -euo pipefail
+          gguf="${PQNLD_CI_GGUF:-$RUNNER_TEMP/model.gguf}"
+          if [ ! -f "$gguf" ]; then
+            curl -sSL -o "$gguf" "$GGUF_URL"
+          fi
+          echo "$GGUF_SHA256  $gguf" | sha256sum -c -
+          echo "PQNLD_CI_GGUF=$gguf" >> "$GITHUB_ENV"
+      - name: Start llama-server
+        run: |
+          set -euo pipefail
+          ~/llama.cpp/build/bin/llama-server -m "$PQNLD_CI_GGUF" \
+            --host 127.0.0.1 --port "$ENGINE_PORT" -ngl 0 -t "$(nproc)" -c 4096 --parallel 1 \
+            > "$RUNNER_TEMP/llama-server.log" 2>&1 &
+          # /health answers 200 while the model still loads and real requests get
+          # 503; readiness is a real completion returning 200.
+          for _ in $(seq 1 180); do
+            code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$ENGINE_PORT/completion" \
+              -H 'Content-Type: application/json' -d '{"prompt":"hello","n_predict":1,"temperature":0}' || true)
+            [ "$code" = "200" ] && { echo "engine ready"; exit 0; }
+            sleep 2
+          done
+          echo "llama-server did not become ready"; tail -40 "$RUNNER_TEMP/llama-server.log"; exit 1
+      - name: Build pqnld
+        run: cargo build --release --manifest-path sidecar-rs/Cargo.toml
+      - name: Probe statistics self-test (no engine needed)
+        run: ./sidecar-rs/target/release/bias_probe --self-test
+      - name: Capability probe against llama.cpp
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/out"
+          ./sidecar-rs/target/release/bias_probe --capability-probe \
+            --base-url "http://127.0.0.1:$ENGINE_PORT" --out "$RUNNER_TEMP/out" | tee "$RUNNER_TEMP/out/caps.txt"
+          grep -q '"verdict":"native-top-k-surface-present"' "$RUNNER_TEMP/out/caps.txt"
+      - name: Start pqnld (engine kind auto, must detect llama.cpp)
+        run: |
+          set -euo pipefail
+          ./sidecar-rs/target/release/pqnld-rs --engine-kind auto \
+            --vllm-url "http://127.0.0.1:$ENGINE_PORT" --model qwen2.5-1.5b \
+            --descriptor qwen25-15b-ci --models-dir sidecar-rs/models \
+            --host 127.0.0.1 --port "$SIDECAR_PORT" --workers 1 \
+            > "$RUNNER_TEMP/sidecar.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -s -m 3 "http://127.0.0.1:$SIDECAR_PORT/healthz" >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "sidecar did not come up"; cat "$RUNNER_TEMP/sidecar.log"; exit 1
+      - name: Capabilities report
+        run: |
+          curl -s "http://127.0.0.1:$SIDECAR_PORT/v1/capabilities" | tee "$RUNNER_TEMP/capabilities.json"
+          python3 - "$RUNNER_TEMP/capabilities.json" <<'PY'
+          import json, sys
+          caps = json.load(open(sys.argv[1]))
+          assert caps["exact_ids"] is False, caps
+          assert caps["tokenize"] is True, caps
+          assert caps["read_width_ladder"][0] <= caps["read_width_ladder"][-1], caps
+          print("capability report consistent:", caps["engine"], caps["read_width_ladder"])
+          PY
+      - name: Live decision arm (must complete with every assertion holding)
+        run: |
+          set -euo pipefail
+          ./sidecar-rs/target/release/bias_probe \
+            --fixture sidecar-rs/tests/fixtures/bias-fixture-ci.jsonl \
+            --arm ci-llamacpp --out "$RUNNER_TEMP/out" \
+            --base-url "http://127.0.0.1:$SIDECAR_PORT" --repeats 3 --assert
+          printf 'PQNLD_LLAMACPP_CI_OK\n'
+      - name: Engine log on failure
+        if: failure()
+        run: tail -60 "$RUNNER_TEMP/llama-server.log" || true

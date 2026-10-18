@@ -64,7 +64,13 @@ Grab the static binary from the
 cargo build --release --manifest-path sidecar-rs/Cargo.toml
 ```
 
-This quickstart uses the live-tested vLLM adapter. Other backend support is
+This quickstart uses the live-tested vLLM adapter. llama.cpp is supported as well:
+its lettered readout uses the chat surface with the letter system prompt (the
+descriptor's `lettered_surface: "native"` selects the raw completion prompt
+instead), the read width widens itself until every option label is visible, and
+`GET /v1/capabilities` states the limits. See
+[the llama.cpp recipe](docs/llamacpp-recipe.md) and
+[engine capabilities](docs/engine-capabilities.md). Other backend support is
 documented in [engine capabilities](docs/engine-capabilities.md).
 
 ```sh

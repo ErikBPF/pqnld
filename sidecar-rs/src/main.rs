@@ -29,6 +29,7 @@ use tokio::net::{TcpListener, UnixListener};
 use tokio::sync::{Mutex, Semaphore};
 
 mod engine;
+mod labels;
 mod mcp;
 
 #[cfg(test)]
@@ -96,6 +97,18 @@ struct ModelSpec {
     engine_profile: String,
     #[serde(default)]
     specific_token_scores: bool,
+    /// Which surface the lettered readout uses on llama.cpp: `chat` (default)
+    /// sends the rendered question through `/v1/chat/completions` with the letter
+    /// system prompt, `native` keeps the raw `/completion` prompt. Ignored by the
+    /// other engine kinds, which have their own surfaces.
+    #[serde(default)]
+    lettered_surface: Option<String>,
+    /// Minimum generic top-k to request when the exact-id path is unavailable.
+    /// llama.cpp has no exact-id scoring, and its answer-slot distribution can
+    /// place option labels far below the default k, so a model that needs this
+    /// path declares how wide to read.
+    #[serde(default)]
+    top_k_floor: Option<usize>,
 }
 
 impl Default for ModelSpec {
@@ -110,6 +123,8 @@ impl Default for ModelSpec {
             chat_template: default_chat_template(),
             engine_profile: default_engine_profile(),
             specific_token_scores: false,
+            lettered_surface: None,
+            top_k_floor: None,
         }
     }
 }
@@ -173,10 +188,79 @@ struct Ctx {
     label_ids: Arc<Mutex<HashMap<String, u32>>>,
     sem: Arc<Semaphore>,
     workers: usize,
+    /// Default label permutation seed for the lettered readout; `None` keeps the
+    /// historical in-order binding. A question may override it with `label_seed`.
+    label_seed: Option<u64>,
 }
 
-fn extended_labels() -> Vec<char> {
-    let mut v = Vec::new();
+/// The label permutation seed for one question: the question's own `label_seed`
+/// when present, otherwise the process default.
+fn question_label_seed(ctx: &Ctx, question: &Value) -> Option<u64> {
+    question
+        .get("label_seed")
+        .and_then(Value::as_u64)
+        .or(ctx.label_seed)
+}
+
+/// What the running engine can and cannot do, for operators and for tests.
+fn capabilities_report(ctx: &Ctx) -> Value {
+    let caps = ctx.engine.capabilities();
+    json!({
+        "engine": match caps.surface {
+            engine::Surface::ChatCompletions => "chat-completions",
+            engine::Surface::Completions => "completions",
+            engine::Surface::NativeGenerate => "native-generate",
+            engine::Surface::Score => "score",
+        },
+        "tokenize": caps.tokenize,
+        "exact_ids": caps.exact_ids,
+        "top_k": caps.top_k,
+        "prompt_logprobs": caps.prompt_logprobs,
+        "max_top_k": caps.max_top_k,
+        "read_width_start": topk_request_size(0, ctx.spec.top_k_floor),
+        "read_width_ladder": read_ladder(0, ctx.spec.top_k_floor),
+        "lettered_surface": if lettered_chat_surface(ctx.spec.lettered_surface.as_deref()) { "chat" } else { "native" },
+        "readout": ctx.spec.readout,
+        "letters": ctx.spec.letters.chars().count(),
+        "unsupported": {
+            "exact_token_ids": !caps.exact_ids,
+            "prompt_logprob_echo": !caps.prompt_logprobs,
+        },
+    })
+}
+
+/// The llama.cpp lettered surface: `native` opts out, everything else (including
+/// the default) uses the measured chat surface.
+fn lettered_chat_surface(lettered_surface: Option<&str>) -> bool {
+    !matches!(lettered_surface, Some("native"))
+}
+
+/// Read widths to try on the generic top-k path, narrowest first. The engine has
+/// no exact-id scoring here, so a label the server ranks below the read width is
+/// simply invisible; a bounded ladder finds the width the model actually needs
+/// instead of refusing a question that a wider read would answer.
+fn read_ladder(options: usize, floor: Option<usize>) -> Vec<usize> {
+    let start = topk_request_size(options, floor);
+    let mut ladder = vec![start];
+    for step in [512usize, 2048, 4096] {
+        if step > start {
+            ladder.push(step);
+        }
+    }
+    ladder
+}
+
+/// Width of the generic top-k read. The default keeps the historical floor of
+/// 20; an exact-id-less engine (llama.cpp) can declare a wider read because its
+/// answer-slot distribution may rank option labels far below the default.
+fn topk_request_size(options: usize, floor: Option<usize>) -> usize {
+    match floor {
+        Some(floor) => std::cmp::max(options, 20).max(floor),
+        None => std::cmp::max(options, 20),
+    }
+}
+
+fn extended_labels() -> Vec<char> {    let mut v = Vec::new();
     for c in 'a'..='z' {
         v.push(c);
     }
@@ -436,6 +520,10 @@ async fn letter_scores(
     keys: &[String],
 ) -> Result<(Vec<f64>, i64, Option<String>), EngineError> {
     let option_labels = labels(ctx, keys.len()).await?;
+    let option_labels = match question_label_seed(ctx, question) {
+        Some(seed) => labels::permuted(option_labels, seed),
+        None => option_labels,
+    };
     let body = render_lettered(state, question, keys, &option_labels);
     let capabilities = ctx.engine.capabilities();
     let specific = ctx.spec.specific_token_scores && capabilities.exact_ids;
@@ -485,24 +573,38 @@ async fn letter_scores(
                 }
             }
         } else {
-            let scores = ctx
-                .engine
-                .topk(&body, std::cmp::max(keys.len(), 20))
-                .await?;
-            if top_token.is_none() {
-                let mut best: Option<(f64, String)> = None;
-                for (token, logprob) in &scores {
-                    if best.as_ref().map(|(b, _)| *logprob > *b).unwrap_or(true) {
-                        best = Some((*logprob, token.clone()));
+            let ladder = read_ladder(keys.len(), ctx.spec.top_k_floor);
+            let last = *ladder.last().expect("the ladder is never empty");
+            for width in ladder {
+                let scores = ctx.engine.topk(&body, width).await?;
+                if top_token.is_none() {
+                    let mut best: Option<(f64, String)> = None;
+                    for (token, logprob) in &scores {
+                        if best.as_ref().map(|(b, _)| *logprob > *b).unwrap_or(true) {
+                            best = Some((*logprob, token.clone()));
+                        }
+                    }
+                    top_token = best.map(|(_, token)| token);
+                }
+                let mut found: HashMap<String, f64> = HashMap::new();
+                for (token, logprob) in scores {
+                    if let Some(label) = letter_of(&token) {
+                        if option_labels.contains(&label) {
+                            found.entry(label).or_insert(logprob);
+                        }
                     }
                 }
-                top_token = best.map(|(_, token)| token);
-            }
-            for (token, logprob) in scores {
-                if let Some(label) = letter_of(&token) {
-                    if option_labels.contains(&label) {
-                        by_label.entry(label).or_insert(logprob);
-                    }
+                let complete = option_labels.iter().all(|l| found.contains_key(l));
+                by_label = found;
+                if complete {
+                    break;
+                }
+                if width != last {
+                    eprintln!(
+                        "readout: width {width} saw {} of {} option labels, escalating to the next rung",
+                        by_label.len(),
+                        option_labels.len()
+                    );
                 }
             }
         }
@@ -516,8 +618,15 @@ async fn letter_scores(
         .collect();
     if !missing.is_empty() {
         return Err(EngineError::Unsupported(format!(
-            "answer-slot logprobs missing option labels: {}",
-            missing.join(", ")
+            "answer-slot logprobs missing option labels: {} (generic top-k read at widths \
+             {ladder}; raise the descriptor's top_k_floor, or use the chat surface via \
+             lettered_surface for the lettered readout)",
+            missing.join(", "),
+            ladder = read_ladder(keys.len(), ctx.spec.top_k_floor)
+                .iter()
+                .map(|w| w.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         )));
     }
     let scores: Vec<f64> = option_labels.iter().map(|l| by_label[l]).collect();
@@ -1045,6 +1154,7 @@ async fn route(req: Request<Incoming>, ctx: Arc<Ctx>) -> Response<Full<Bytes>> {
     let path = req.uri().path().to_string();
     match (method.as_str(), path.as_str()) {
         ("GET", "/healthz") => json_response(200, json!({"status": "ok"})),
+        ("GET", "/v1/capabilities") => json_response(200, capabilities_report(&ctx)),
         ("POST", "/v1/systemone") | ("POST", "/v1/decide") => match req.into_body().collect().await {
             Ok(body) => handle_decide(ctx, body.to_bytes()).await,
             Err(e) => error_response(400, format!("bad request: {e}")),
@@ -1145,6 +1255,9 @@ async fn main() {
         .and_then(|w| w.parse().ok())
         .unwrap_or(MAX_QUESTION_WORKERS)
         .max(1);
+    let label_seed: Option<u64> = arg_value(&args, "--label-permute-seed")
+        .or_else(|| env_first("PQNLD_LABEL_PERMUTE_SEED", "DECISION_LABEL_PERMUTE_SEED"))
+        .and_then(|s| s.parse().ok());
 
     let spec = load_spec(&models_dir, descriptor.as_deref().unwrap_or(&model));
     let temperature = arg_value(&args, "--temperature")
@@ -1183,6 +1296,8 @@ async fn main() {
         model.clone(),
         spec.letter_system_prompt.clone(),
         spec.enable_thinking,
+        spec.top_k_floor,
+        lettered_chat_surface(spec.lettered_surface.as_deref()),
     );
     let ctx = Arc::new(Ctx {
         engine,
@@ -1196,6 +1311,7 @@ async fn main() {
         label_ids: Arc::new(Mutex::new(HashMap::new())),
         sem: Arc::new(Semaphore::new(workers)),
         workers,
+        label_seed,
     });
 
     let mode = match ensure_mode(&ctx).await {
@@ -1227,7 +1343,9 @@ async fn main() {
     let bind = format!("{host}:{port}");
     let listener = TcpListener::bind(&bind).await.expect("bind tcp");
     eprintln!(
-        "decision readout on http://{bind}/v1/decide -> {engine_url} (readout={mode_name})"
+        "decision readout on http://{bind}/v1/decide -> {engine_url} \
+         (readout={mode_name}, capabilities={})",
+        capabilities_report(&ctx)
     );
     let ctx = ctx.clone();
     tokio::spawn(async move { accept_tcp(listener, ctx).await });

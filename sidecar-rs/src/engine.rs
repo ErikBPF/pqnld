@@ -115,6 +115,14 @@ pub fn parse_kind(value: &str) -> Option<EngineKind> {
 
 /// Best-effort startup probe used by `--engine-kind auto`.
 pub async fn detect_kind(client: &reqwest::Client, base_url: &str) -> EngineKind {
+    // llama-server answers /props with a llama.cpp-specific shape and exposes
+    // /tokenize; check that before anything that could look OpenAI-shaped.
+    if let Some(props) = get_json(client, base_url, "/props").await {
+        let text = props.to_string().to_lowercase();
+        if text.contains("total_slots") || text.contains("chat_template") {
+            return EngineKind::LlamaCpp;
+        }
+    }
     if let Some(value) = get_json(client, base_url, "/openapi.json").await {
         let text = value.to_string().to_lowercase();
         if text.contains("sglang") {
@@ -146,6 +154,8 @@ pub fn build(
     model: String,
     system_prompt: String,
     enable_thinking: bool,
+    top_k_floor: Option<usize>,
+    lettered_chat: bool,
 ) -> Arc<dyn Engine> {
     let endpoint = Endpoint {
         client,
@@ -157,9 +167,15 @@ pub fn build(
     };
     match kind {
         EngineKind::Vllm => Arc::new(VllmEngine { endpoint }),
-        EngineKind::LlamaCpp => Arc::new(LlamaCppEngine { endpoint }),
+        EngineKind::LlamaCpp => Arc::new(LlamaCppEngine { endpoint, lettered_chat }),
         EngineKind::Sglang => Arc::new(SglangEngine { endpoint }),
-        EngineKind::OpenAi => Arc::new(OpenAiEngine { endpoint }),
+        EngineKind::OpenAi => Arc::new(OpenAiEngine {
+            endpoint,
+            // The OpenAI API caps top_logprobs at 20. An OpenAI-compatible server
+            // that accepts wider reads (llama.cpp maps it to n_probs) declares the
+            // width in the descriptor, so honour it instead of refusing to look.
+            limit: top_k_floor.unwrap_or(20),
+        }),
     }
 }
 
@@ -335,6 +351,11 @@ impl Engine for VllmEngine {
 
 pub struct LlamaCppEngine {
     endpoint: Endpoint,
+    /// Read the lettered answer slot through `/v1/chat/completions` with the
+    /// letter system prompt (the measured default: same weights, ~8x fewer
+    /// label-driven flips than the native raw-completion prompt) instead of the
+    /// native `/completion` raw prompt.
+    lettered_chat: bool,
 }
 
 impl Engine for LlamaCppEngine {
@@ -346,7 +367,11 @@ impl Engine for LlamaCppEngine {
             prompt_logprobs: false,
             max_top_k: None,
             max_explicit_ids: None,
-            surface: Surface::NativeGenerate,
+            surface: if self.lettered_chat {
+                Surface::ChatCompletions
+            } else {
+                Surface::NativeGenerate
+            },
         }
     }
 
@@ -372,6 +397,16 @@ impl Engine for LlamaCppEngine {
 
     fn topk<'a>(&'a self, prompt: &'a str, k: usize) -> BoxFuture<'a, Result<Vec<(String, f64)>, EngineError>> {
         Box::pin(async move {
+            if self.lettered_chat {
+                // llama.cpp maps `logprobs` + `top_logprobs` to its native
+                // `n_probs`, so the same OpenAI-shaped request works here.
+                let request = self.endpoint.chat_body(prompt, json!({"top_logprobs": k}));
+                let payload = self
+                    .endpoint
+                    .post_json("/v1/chat/completions", &request)
+                    .await?;
+                return parse_chat_topk(&payload).ok_or_else(no_answer_slot);
+            }
             let body = json!({
                 "model": self.endpoint.model,
                 "prompt": prompt,
@@ -490,6 +525,12 @@ impl Engine for SglangEngine {
 
 pub struct OpenAiEngine {
     endpoint: Endpoint,
+    limit: usize,
+}
+
+/// Top-k actually requested on the OpenAI-compatible chat surface.
+fn openai_topk_size(k: usize, limit: usize) -> usize {
+    k.min(limit)
 }
 
 impl Engine for OpenAiEngine {
@@ -499,7 +540,7 @@ impl Engine for OpenAiEngine {
             exact_ids: false,
             top_k: true,
             prompt_logprobs: true,
-            max_top_k: Some(20),
+            max_top_k: Some(self.limit),
             max_explicit_ids: None,
             surface: Surface::ChatCompletions,
         }
@@ -529,7 +570,7 @@ impl Engine for OpenAiEngine {
         Box::pin(async move {
             let request = self
                 .endpoint
-                .chat_body(prompt, json!({"top_logprobs": k.min(20)}));
+                .chat_body(prompt, json!({"top_logprobs": openai_topk_size(k, self.limit)}));
             let payload = self.endpoint.post_json("/v1/chat/completions", &request).await?;
             parse_chat_topk(&payload).ok_or_else(no_answer_slot)
         })
@@ -819,7 +860,7 @@ mod tests {
         });
         let client = reqwest::Client::builder().no_proxy()
             .timeout(std::time::Duration::from_secs(2)).build().unwrap();
-        (build(kind, client, url, "test".to_string(), "system".to_string(), false), server)
+        (build(kind, client, url, "test".to_string(), "system".to_string(), false, None, true), server)
     }
 
     #[tokio::test]
@@ -1006,7 +1047,33 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn llamacpp_chat_surface_parses_openai_shaped_logprobs() {
+        // The native surface parses `completion_probabilities`; this payload only
+        // has the chat shape, so a pass proves the chat request path was used.
+        let (engine, server) = fixture_engine(
+            EngineKind::LlamaCpp,
+            json!({"choices": [{"logprobs": {"content": [{"token": "b",
+                "top_logprobs": [{"token": "b", "logprob": -0.1}, {"token": "a", "logprob": -2.0}]}]}}]}),
+        )
+        .await;
+        let scores = engine.topk("prompt", 8).await.unwrap();
+        server.await.unwrap();
+        assert_eq!(scores.len(), 2);
+        assert_eq!(scores[0].0, "b");
+    }
+
     #[test]
+    fn openai_topk_size_honours_a_declared_wider_read() {
+        // The OpenAI API caps at 20; a declared floor raises it for compatible
+        // servers such as llama.cpp, whose chat endpoint maps it to n_probs.
+        assert_eq!(openai_topk_size(20, 20), 20);
+        assert_eq!(openai_topk_size(5, 20), 5);
+        assert_eq!(openai_topk_size(2048, 20), 20);
+        assert_eq!(openai_topk_size(2048, 2048), 2048);
+        assert_eq!(openai_topk_size(64, 2048), 64);
+    }
+
     fn openai_top_logprobs_response() {
         let payload = json!({
             "choices": [{"logprobs": {"content": [{

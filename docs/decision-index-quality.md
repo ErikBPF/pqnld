@@ -4,7 +4,7 @@
 
 ## Evidence and limits
 
-Apollo root `/mnt/data/ai/validation/decision-index-2026-10-01` is mounted at `/work` in existing `dibuild`. Verified interpreter `/work/venv/bin/python` is Python 3.12.3; installed `decision-index==0.2.1` is editable from clean kit commit `87d4650b42b377c0291a89c1f1a879f9b31082bf`. Host venv is not executable outside the container. SSH identity and existing pinned host key were verified against owning fleet/config before access.
+The Decision Index kit checkout is mounted at `/work` in the build container. Verified interpreter `/work/venv/bin/python` is Python 3.12.3; installed `decision-index==0.2.1` is editable from clean kit commit `87d4650b42b377c0291a89c1f1a879f9b31082bf`. Host venv is not executable outside the container. SSH identity and existing pinned host key were verified against owning fleet/config before access.
 
 The suite verifier reported matching content, additions, exclusions and subsets. Selected gzip differs from manifest's compressed hash; official verifier accepts its matching uncompressed content hash. Suite has 119,898 base scoreable requests plus 30,419 added requests: **150,317 eligible requests**, 44 benchmarks, 38 index benchmarks. Physical selected-file rows are a different denominator: 124,971 before edition/exclusion filtering.
 
@@ -16,7 +16,7 @@ Structured JSON instructions and descriptions are supported. All original 100
 requests passed input validation: 746 choice and 14 noul questions. No coercion,
 filtering, tuning or training occurred.
 
-[Execution receipt](quality-evidence/fresh-result-20261002.json) pins source archive `866f0c04…9d72`, release `ded05dca…d87a`, and task descriptor `2a9f6df5…4aa5`; full hashes are retained. Immutable archive and running executable hashes matched approved Apollo GREEN artifacts. Task-copy descriptor forced lettered/exact scoring; no echo fallback, model switch, engine/MTP change or restart. New sidecar cache began blank; shared engine cache/load was not reset or isolated.
+An execution receipt (kept privately) pins source archive `866f0c04…9d72`, release `ded05dca…d87a`, and task descriptor `2a9f6df5…4aa5`; full hashes are retained. Immutable archive and running executable hashes matched the approved GREEN artifacts from the evaluation host. Task-copy descriptor forced lettered/exact scoring; no echo fallback, model switch, engine/MTP change or restart. New sidecar cache began blank; shared engine cache/load was not reset or isolated.
 
 One pipeline included two stock synthetic warmups outside the scored sample denominator. Official 100-request run: **222.5s**, excluding warmup/scoring. Supervised pipeline: **270.1s**, including imports, warmup, scoring and up to ~5s polling lag; sidecar through cleanup 270.3s, within 900s budget. Successful HTTP request latency on 100 requests: median 321.1ms, p95 14284.2ms, mean 2225.1ms; not per-question or cache-free latency.
 
@@ -39,7 +39,7 @@ investigate attribution, compare the
 same model and examples using ordinary generation and closed-set readout, keeping
 information and scoring comparable. That comparison has not been run.
 
-All 44 benchmarks are represented, usually by two requests. [Fresh native metrics](quality-evidence/fresh-native-metrics-20261002.json) preserve task names, scores and denominators; [historical metrics](quality-evidence/native-metrics-20261002.json) remain unchanged. Native metrics apply to complete supported sampled case groups; request count is not universally a field/group denominator.
+All 44 benchmarks are represented, usually by two requests. Fresh native metrics (kept privately) preserve task names, scores and denominators; historical metrics (kept privately) remain unchanged. Native metrics apply to complete supported sampled case groups; request count is not universally a field/group denominator.
 
 | Task | Sample requests | Fresh official native metric |
 |---|---:|---|
@@ -57,19 +57,19 @@ High field accuracy can hide failed whole-case decisions and class imbalance; AC
 
 ## Comparison limits
 
-[The baseline join](quality-evidence/fresh-comparison-20261002.json) matches all
+The baseline join (kept privately) matches all
 100 IDs/payloads and 760 answers, with zero probability or native-primary metric
 changes. This is observed parity, not causal accuracy improvement or serving
 determinism: engine epoch, shared cache and chat load were uncontrolled. Model API
 identity remained unchanged, but no weight-content hash was established.
-[Earlier run comparisons](quality-evidence/reproducibility-20261002.json) remain
+Earlier run comparisons (kept privately) remain
 available as evidence, not a repeatability guarantee.
 
 ## Commands, privacy and continuing work
 
-[Fresh executed command](quality-evidence/fresh-command-receipt-20261002.txt) records one attempt, exit0, fresh-path guards and owned-PID cleanup. Earlier [offline commands](quality-evidence/commands-20261002.txt) and [receipt](quality-evidence/offline-score-20261002.json) retain their distinct scope. Offline flags/Python `-B` remained set; inference used only the authorized existing engine. No builds, downloads, installs, source edits or engine reconfiguration occurred in this subtask.
+A fresh executed command (kept privately) records one attempt, exit0, fresh-path guards and owned-PID cleanup. Earlier offline commands (kept privately) and receipt (kept privately) retain their distinct scope. Offline flags/Python `-B` remained set; inference used only the authorized existing engine. No builds, downloads, installs, source edits or engine reconfiguration occurred in this subtask.
 
-Raw records/logs remain Apollo-private: directories0700/files0600. Reports contain aggregate metrics/counts/hashes only, no rows, responses, labels, credentials or full environment. Kit MIT license does not license constituent corpora; no redistribution permission inferred or corpus copied locally.
+Raw records/logs remain private to the operator: directories `0700`, files `0600`. Reports contain aggregate metrics/counts/hashes only, no rows, responses, labels, credentials or full environment. Kit MIT license does not license constituent corpora; no redistribution permission inferred or corpus copied locally.
 
 The sample is complete; the suite is not. No general calibration or full-suite
 quality claim is justified by these tiny per-task samples.
