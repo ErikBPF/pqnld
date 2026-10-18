@@ -244,22 +244,17 @@ use top-k (chat) or echo (legacy completions, `logprobs<=5`).
 | SGLang | exact IDs / top-k | `/generate` `token_ids_logprob`; `/v1/score` `label_token_ids` | `/tokenize` | `/generate` `logprob_start_len:0` |
 | OpenAI | top-k | — | none | legacy `/v1/completions` `echo:true`, `logprobs<=5` |
 
-Resolved 2026-10-16 (llama.cpp read width): the generic top-k readout
-**escalates** instead of refusing. It starts at `max(options, 20)` (or the
-descriptor's `top_k_floor`) and retries at 512, 2048 and 4096 while labels are
-missing, logging each rung. Measured on the 27B trial: a descriptor with no
-`top_k_floor` previously refused those questions at the default width; with the
-ladder both surfaces complete with zero refusals and the same numbers as a fixed
-2048-wide read (native accuracy 0.84 / p95 0.758, chat 0.99 / 0.084). `top_k_floor`
-is now an override for the starting rung, not a requirement.
+llama.cpp read width: the generic top-k readout **escalates**. It starts at
+`max(options, 20)` (or the descriptor's `top_k_floor`, which therefore only sets the
+starting rung) and retries at 512, 2048 and 4096 while option labels are missing,
+logging each rung, and refuses only if the widest rung still cannot see every label.
+Measurements are in [label-bias-results.md](label-bias-results.md).
 
-Resolved 2026-10-15 (llama.cpp lettered surface): the lettered readout defaults
-to the **chat** surface (`/v1/chat/completions` with `letter_system_prompt`), not
-the native raw prompt. On identical weights (27B UD-Q4_K_M, 13-question fixture,
-read width 2048) the raw prompt gave label flips 0.22, p95 spread 0.76 and
-accuracy 0.84, while the chat surface gave 0.03, 0.08 and 0.99. `lettered_surface:
-"native"` opts out. Reaching the letters on the chat surface also required the
-OpenAI-shaped request to honour `top_k_floor` rather than clamping at 20.
+llama.cpp lettered surface: the readout uses the **chat** surface
+(`/v1/chat/completions` with `letter_system_prompt`). `lettered_surface: "native"`
+selects the raw `/completion` prompt instead. The OpenAI-shaped request honours
+`top_k_floor` rather than clamping `top_logprobs` at the API's default of 20, which
+is what makes the answer-slot letters reachable on such a server.
 
 Resolved 2026-10-13 (llama.cpp): the adapter is **live-verified** against the
 pinned `ggml-org/llama.cpp` image for the native top-k surface —

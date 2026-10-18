@@ -84,8 +84,8 @@ llama.cpp shape, before anything that could look OpenAI-compatible).
 
 ## 6. What to expect
 
-From the recorded arms: llama.cpp is stable question-to-question and across
-repeats, but on identical weights the **raw prompt** produced label-driven
-decisions (label flips 0.22, p95 spread 0.76) while the **chat surface** did not
-(0.03, 0.08). Prefer the chat surface and check `/v1/capabilities` before trusting
-an unchanged deployment.
+Sequential repeats of one question are identical against one running engine, and the
+lettered readout on the chat surface keeps a decision stable when the labels are
+reassigned. Check `/v1/capabilities` on the running deployment, and
+[label-bias-results.md](label-bias-results.md) for the measurements behind these
+choices.

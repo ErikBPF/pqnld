@@ -33,6 +33,9 @@ Request:
   existing renderer preserves strings directly and serializes structured values.
   Choice `criteria` is an object with 2–255 keys. A `null` description prints its
   key. The wire ceiling does not guarantee enough tokenizer labels.
+- A question may carry `label_seed` (integer): it binds the option labels by a
+  seeded cyclic shift instead of in option order, and the same seed always renders
+  the same binding. Without it, labels are bound in option order.
 
 Invalid questions return 422 before engine access. HTTP and MCP use the same
 question validation rules.
@@ -73,6 +76,7 @@ Invariants (checked by the server before it replies, and rejected if broken):
 | Status | When |
 |---|---|
 | `400` | Malformed JSON body, or a missing `questions` field |
+| `200` | `GET /v1/capabilities` reports the engine surface: `exact_ids`, `prompt_logprobs`, `top_k`, the starting read width and the escalation ladder, the lettered surface, and an `unsupported` block |
 | `422` | Empty questions, non-object question, missing instructions, missing/non-object criteria, choice cardinality outside 2–255, unsupported type, incomplete answer-slot labels, or model capacity refusal (`Unsupported`). The message is preserved in `error` |
 | `404` | Unknown path |
 | `500` | Engine error, malformed/incomplete/misaligned echo evidence, non-finite scores, or failed readout self-check |

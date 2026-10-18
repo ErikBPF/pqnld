@@ -40,16 +40,21 @@ Steps:
 1. Render `state`, the question instructions, and `letter) key-or-description`
    lines for each option, ending with "Reply with exactly one option letter."
 2. Send one chat request with `max_tokens=1`, `logprobs=true`,
-   `top_logprobs=max(len(keys), 20)`, `temperature=0`, and the descriptor's
-   `enable_thinking` toggle.
+   `top_logprobs` starting at `max(len(keys), 20)` (or the descriptor's
+   `top_k_floor`), `temperature=0`, and the descriptor's `enable_thinking` toggle.
+   On llama.cpp this is the descriptor's `lettered_surface` (default `chat`; the
+   `native` alternative uses the raw `/completion` prompt).
 3. Walk the answer slot's `top_logprobs`; keep the first entry per letter that is
    in `letters`, after trimming whitespace and lowercasing. Only a single ASCII
    letter qualifies; words and special-token strings are ignored.
-4. Require every option label to be present. Missing labels raise `Unsupported`
-   (HTTP 422); no scores are fabricated. Asking for at least N top tokens does
-   not guarantee that all N labels appear.
+4. Require every option label to be present. On the generic top-k path the read
+   widens itself first (512, 2048, 4096) and only then raises `Unsupported`
+   (HTTP 422); no scores are fabricated, and no distribution is returned over a
+   subset of the options.
 
-Then `softmax(score / temperature)` gives the distribution, and `choice` is the
+A question may carry `label_seed` (or the sidecar may run with
+`--label-permute-seed`) to bind labels by a seeded cyclic shift instead of in option
+order; without a seed the binding is in option order. Then `softmax(score / temperature)` gives the distribution, and `choice` is the
 argmax. For `noul`, the keys are `false`/`true` and `noul` is
 `P(true)` within the allowed-label readout. These normalized scores are not
 automatically calibrated probabilities of correctness; calibration needs
