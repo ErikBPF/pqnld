@@ -5,10 +5,10 @@
 # mock-engine tests) and run with
 # `cargo test --release --manifest-path sidecar-rs/Cargo.toml`.
 # Scenarios marked @unautomated are contract only; no step binding exists yet.
-# Seed: homelab/docs/plans/apollo-decision-model/one-pager.md, SHA256
+# Seed: the decision-model one-pager in the coordination repo, SHA256
 # recorded on the plan; seed quote: "add a small lora layer to this model or a
 # sidecar to also serve it as a decision model".
-# Plan: homelab/docs/plans/apollo-decision-model/one-pager.md.
+# Plan: the same one-pager.
 # Wire format: apolinario/decision-index @ 52a698928a9ae5bdf16b75687c903871db29c6e5.
 # Readout: options are rendered with single-letter labels and ONE
 # /v1/chat/completions request per question asks for exactly one option letter;
@@ -24,8 +24,8 @@
 # the temperature. An "auto" descriptor probes the model at startup and keeps
 # lettered only when a single option letter is the top token for a fixture.
 # Cache is a bounded LRU keyed by model + descriptor + question.
-# DR-07 receipt: Apollo results/s2b-kit-results.jsonl, produced by run-s2-kit.sh.
-# DR-15 receipt: Apollo results/parallel.json and results/parallel-numseq8-*.json,
+# DR-07 receipt: the kit results, produced by run-s2-kit.sh (kept privately).
+# DR-15 receipt: the parallel run results (kept privately),
 # produced by the historical Python bench_parallel.py (removed in the Rust-only
 # port). --max-num-seqs 2 / --each 4: parallelism 5.59 of 8,
 # 2.58 req/s. --max-num-seqs 8 / --each 4: parallelism 6.37, 5.74 req/s. / --each 8
@@ -33,7 +33,7 @@
 # decisions and chat both complete while the engine batches them. DR-15 stays
 # @unautomated: the measurement is manual, no failing-first step binding exists.
 
-Feature: Decision readout sidecar over a served Apollo model
+Feature: Decision readout sidecar over a served model
   A Decision Index request is answered with a typed distribution over exactly the
   supplied options, read from the model's own answer-slot probabilities.
   A question the engine cannot answer is refused, never guessed.
@@ -147,7 +147,7 @@ Feature: Decision readout sidecar over a served Apollo model
 
   @DR-15 @unautomated @S2
   Scenario: One engine serves chat and decisions concurrently
-    Given the full engine profile bound to the Apollo tailnet
+    Given the full engine profile bound to the served endpoint
     When a mix of chat completions and decisions is issued concurrently
     Then both kinds complete without error
     And decisions are not serialized behind chat

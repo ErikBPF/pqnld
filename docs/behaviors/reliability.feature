@@ -1,7 +1,7 @@
 @reliability
 Feature: Fail-closed typed decisions
   # Human basis: pqnld-one-pager.md, reliability priority, and "lets do improvements".
-  # Named Rust bindings and observed RED/GREEN live in reliability-evidence/receipt.md.
+  # Named Rust bindings and observed RED/GREEN live in the private receipts.
   # This feature is a behavior contract, not a standalone Gherkin test runner.
 
   Scenario: Malformed choices do not reach the engine

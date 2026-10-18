@@ -2,7 +2,7 @@
 
 **Status:** plan only — not executed. Nothing here has been applied, and this
 task did not restart, stop, or modify the engine or cache containers.
-**Target:** Apollo engine `apollo-qwen38-gittensor-lmcache` (vLLM 0.30.0,
+**Target:** the engine container (vLLM 0.30.0,
 served id `qwen38-27b-nvfp4`, TP2, MTP mandatory).
 **Workload:** many short `max_tokens=1` exact-token logprob requests that share
 a long state prefix; measured per-question median ~258 ms; prefill-bound.
@@ -222,12 +222,12 @@ nondeterminism/correctness risk is real. Leave disabled.
    (`Prefix cache hit rate`, `External prefix cache hit rate`, `GPU KV cache
    usage`, `Deferred`/`Waiting`) before and after.
 6. **A/B procedure.** Reuse the established safe procedure: capture
-   `$W/pm.sh inspect apollo-qwen38-gittensor-lmcache` -> `Config.CreateCommand`;
+   `$W/pm.sh inspect the engine container` -> `Config.CreateCommand`;
    generate a temp command (rename `--name`, change only the tested flags);
-   `pm.sh stop apollo-qwen38-gittensor-lmcache`; wait for both GPUs >=15000 MiB
+   `pm.sh stop the engine container`; wait for both GPUs >=15000 MiB
    free (restart the LMCache server if it retains memory); `pm.sh run` the temp
    engine; measure; `pm.sh stop` + `pm.sh rm -f` the temp container;
-   `pm.sh start apollo-qwen38-gittensor-lmcache` to restore the exact original.
+   `pm.sh start the engine container` to restore the exact original.
    Never leave a temp container running.
 
 ## Top 5 (summary)

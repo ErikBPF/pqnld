@@ -8,9 +8,8 @@ research below is not a promise of live adapter compatibility.
 
 ## Method and evidence
 
-- **vLLM 0.30.0 (Apollo, `qwen38-27b-nvfp4`)** was read live, read-only: the
-  running server's `GET http://100.77.14.27:11542/openapi.json` and the installed
-  package under `apollo:/usr/local/lib/python3.12/dist-packages/vllm/`. The
+- **vLLM 0.30.0** was read live, read-only: the running server's
+  `GET /openapi.json` and the installed vLLM package. The
   container command carries no `--max-logprobs`, so the default 20 applies.
   Public reference: <https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html>.
 - **llama.cpp** `tools/server/README.md` and `tools/server/server-common.cpp`,
@@ -269,7 +268,7 @@ Unresolved / to verify before claiming live adapter support: SGLang's OpenAI
 chat coverage for top-k (`top_logprobs`) under reasoning models; whether OpenAI's
 newer reasoning models accept `logprobs`/`top_logprobs` at all; the read width
 needed on a task-competent llama.cpp model. The vLLM explicit-ID defect under MTP remains the
-blocking gate for exact-ID shared serving on Apollo; see
+blocking gate for exact-ID shared serving on the evaluation host; see
 [mixed-readout-diagnosis.md](mixed-readout-diagnosis.md).
 Do not build a server-side SGLang `/v1/decisions` fast path yet — it is a
 different conditioning path and needs its own correctness evidence.

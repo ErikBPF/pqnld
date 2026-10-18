@@ -1,12 +1,12 @@
 # Global workers — accepted planning extension
 
-**Stage / revision:** PL + IP + GREEN + RV / workers-3, 2026-10-02. **Status:** R4 implemented with Apollo assertion RED/GREEN; final coverage and conformance review clear; complete debug/release suites pass. Basis: reliability priority and Q-PQNLD-3, answered “Global bound (Recommended)”. This extends R1–R3 in [the reliability plan](reliability-improvements.md); it does not supersede their acceptance.
+**Stage / revision:** PL + IP + GREEN + RV / workers-3, 2026-10-02. **Status:** R4 implemented with evaluation-host assertion RED/GREEN; final coverage and conformance review clear; complete debug/release suites pass. Basis: reliability priority and Q-PQNLD-3, answered “Global bound (Recommended)”. This extends R1–R3 in [the reliability plan](reliability-improvements.md); it does not supersede their acceptance.
 
 ## Outcome and boundary
 
 `--workers N` should bound active sidecar scoring across client requests, including startup/readout scoring probes. Preserve stored question order at `N=1`; on a failed concurrent decision, cancel and drain its remaining tasks instead of detaching them. Ordinary chat sent directly to the engine is outside this bound. Never turn this scheduling guarantee into engine determinism or mixed-MTP readiness.
 
-The [contract](behaviors/global-workers.feature) is approved and operationalized by named Rust tests in [the implementation receipt](reliability-evidence/receipt.md). Existing semaphore and Tokio task management replace no scheduler/service. Deployment is not authorized; Q-PQNLD-4 separately authorizes one bounded fresh sample after remote tests, recorded in [the reliability plan](reliability-improvements.md).
+The [contract](behaviors/global-workers.feature) is approved and operationalized by named Rust tests in the implementation receipt (kept privately). Existing semaphore and Tokio task management replace no scheduler/service. Deployment is not authorized; Q-PQNLD-4 separately authorizes one bounded fresh sample after remote tests, recorded in [the reliability plan](reliability-improvements.md).
 
 ## Grounding and grill
 
@@ -20,14 +20,14 @@ The reliability boundary is explicit: admission control reduces sidecar concurre
 
 **Minimum GREEN:** enforce the existing global budget consistently, reuse task cancellation/draining, preserve response format and question order. Do not change temperature, score parsing, labels, or cache policy in this slice.
 
-**Verification:** run `make test` from a dedicated pqnld source-snapshot workspace **on Apollo only**. No local Rust builds/tests/formatting after the user's environment correction. `if make test; then printf 'R4_OK\n'; else exit 1; fi` prints marker only after all assertions pass. Preserve actual remote RED and GREEN receipts. No new framework or dependency. Documentation must describe the revised global bound only after observed tests pass.
+**Verification:** run `make test` from a dedicated pqnld source-snapshot workspace **on the evaluation host only**. No local Rust builds/tests/formatting after the user's environment correction. `if make test; then printf 'R4_OK\n'; else exit 1; fi` prints marker only after all assertions pass. Preserve actual remote RED and GREEN receipts. No new framework or dependency. Documentation must describe the revised global bound only after observed tests pass.
 
 **Rollout / rollback:** local reviewed diff only; publishing and deployment require separate authorization. Revert only this task's scheduler patch if verification fails, without discarding R1–R3 or unrelated work. Three repairs of one failure is the limit. Final RV covers correctness, deadlocks, cancellation, throughput implications, compatibility, and simplicity.
 
 ## Decisions and continuing work
 
 Q-PQNLD-3 is answered; no further scheduling-policy approval is needed. R1–R4 and
-JSON compatibility are green in both Apollo debug/release profiles; corpus
+JSON compatibility are green in both debug and release profiles on the evaluation host; corpus
 verification, two official offline scores and the one authorized fresh sample
 are complete. The user requests final review, docs updates and local task merges
 to `main`; pushing, deployment and further inference remain unauthorized.

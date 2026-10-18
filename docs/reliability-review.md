@@ -1,6 +1,6 @@
 # Reliability: independent review and revision
 
-**Stage / revision:** final RV + local integration / review-4, 2026-10-02. **Status:** final source/conformance review clear; Apollo rerun passed 47 tests in each debug/release profile with unchanged artifact hashes. Fresh sample completed 100/100. User-authorized local merges follow scoped doc/package verification. Formatter/Clippy and full homelab gate remain blocked; no all-gates-green claim.
+**Stage / revision:** final RV + local integration / review-4, 2026-10-02. **Status:** final source/conformance review clear; evaluation-host rerun passed 47 tests in each debug/release profile with unchanged artifact hashes. Fresh sample completed 100/100. User-authorized local merges follow scoped doc/package verification. Formatter/Clippy and full homelab gate remain blocked; no all-gates-green claim.
 
 ## Outcome and scope
 
@@ -12,7 +12,7 @@ model/prompt/readout/backend system; no causal component diagnosis was performed
 This final revision makes that boundary explicit without changing code, accepted
 behavior, the corpus, or recorded measurements.
 
-Reviewed first-draft source snapshot was `293f51030953c6d0ee9811980f80e062b4b0165c27b6e78b6f93a17cf9304e37`. Its source delta is preserved in [the first-draft production patch](reliability-evidence/first-draft-production.patch); [RED/GREEN receipts](reliability-evidence/receipt.md) retain discovery, infrastructure failures, and successful checks. Earlier local evidence predates the user's Apollo-only correction. All later Rust and benchmark processes run on Apollo.
+Reviewed first-draft source snapshot was `293f51030953c6d0ee9811980f80e062b4b0165c27b6e78b6f93a17cf9304e37`. Its source delta is preserved in the first-draft production patch (kept privately); RED/GREEN receipts (kept privately) retain discovery, infrastructure failures, and successful checks. Earlier local evidence predates the user's evaluation-host-only correction. All later Rust and benchmark processes run on the evaluation host.
 
 ## Independent perspectives and dispositions
 
@@ -33,12 +33,12 @@ Editorial structure/prose review and the earlier two-round grill are recorded in
 
 ## Evidence and limits
 
-First reviewed Apollo gate passed 41 unit tests and one CLI integration test;
+First reviewed evaluation-host gate passed 41 unit tests and one CLI integration test;
 the latter runs 29 startup cases. After coverage and accepted JSON compatibility
 revisions, final debug and release each passed **46 unit + 1 integration tests**.
 Final source snapshot is `866f0c04f189c7039b07585d06c337d33e9cc296fab2fa05bb4fafe844bf9d72`;
 the pinned release SHA256 is `ded05dca02e73849c8f9a88da981e717bb20211086796c2477e53d12caa6d87a`.
-Formatter and Clippy components are absent on Apollo, and formatting already
+Formatter and Clippy components are absent on the evaluation host, and formatting already
 failed at the untouched baseline; no component installation or blanket formatting
 is part of this delivery.
 
@@ -85,11 +85,11 @@ Staged verification identified 64 whitespace diagnostics in historical logs and
 the frozen patch, none in source or Markdown. A narrow `.gitattributes` exception
 preserves those artifact bytes; source, scripts, contracts and docs retain normal
 Git whitespace checks. The final control must show source whitespace still fails.
-Final Apollo debug/release checks and scoped doc/package verification are the
+Final debug/release on the evaluation host checks and scoped doc/package verification are the
 landing evidence; neither clears unavailable formatter/lint or inherited homelab
 failures. Original seed and first-draft evidence remain preserved.
 
-[Final Apollo merge verification](reliability-evidence/apollo-merge-validation.txt)
+Final final merge verification (kept privately)
 records Rust/Cargo 1.99.0, zero exits for both owner test commands, 46 unit plus
 one integration test in each profile, and matching source/debug/release hashes.
 The final independent reconciliation found all five doc findings fixed, with no
@@ -98,10 +98,10 @@ new material contradiction. No further production changes or inference were need
 No accepted behavior is weakened. The user now authorizes final review, docs
 updates, commits and local merges of both task branches to `main`; no push,
 deployment or additional inference is authorized. Final docs and test checks run
-on Apollo. The prior scoped docs checks passed, but full homelab validation remains
+on the evaluation host. The prior scoped docs checks passed, but full homelab validation remains
 blocked by fourteen inherited broken links and remote execution prerequisites.
 Unrelated dirty work in canonical homelab stays outside the task commits and merges.
-Raw benchmark rows/answers stay on Apollo; source and summary receipts are the
+Raw benchmark rows/answers stay private to the operator; source and summary receipts are the
 delivery surface.
 
 Worker admission does not limit inbound body memory, direct engine chat, or upstream work already received when a local future is cancelled. UDS path safety, usage accounting, provider scaffolds, and mixed-MTP readiness remain follow-ups. Recovery preserves original benchmark outputs and uses only the task-owned source-snapshot workspace; no unrelated source or running-host configuration is overwritten. A later rollback should revert only task commits through the owner workflow, never reset unrelated `main` work.

@@ -9,14 +9,13 @@ the [current readout contract](wire.md).
 All numbers are **measured on the reference rig** and are directional, not
 guarantees. Your model, GPU, and flags dominate the result.
 
-Rig: 2× RTX 5060 Ti (16 GB each), Qwen3.8-27B NVFP4 (Gittensor), vLLM
+Rig: two 16 GB GPUs, a 27B NVFP4 model, vLLM
 tensor-parallel 2, FP8 KV cache, MTP speculative decoding (6 tokens), LMCache
 connector, `max_model_len` 200000, `gpu_memory_utilization` 0.90,
-`--enable-prefix-caching --enable-chunked-prefill`. The engine image was a
-locally built `localhost/apollo-qwen38-lmcache:trial`, based on
+`--enable-prefix-caching --enable-chunked-prefill`. The engine image was a locally built trial engine image, based on
 `vllm/vllm-openai@sha256:5f5e535216848d0c52159c8c13a0af04be5f6fe1a84e79914300610796f76d40`
 plus two LMCache packed-KV patches; pqnld ran from source inside it. The raw
-receipts were kept under the Python-era `build_examples/2x-rtx5060ti/` directory,
+receipts were kept under an example GPU build directory,
 removed in the Rust-only port.
 
 ## The readout ladder

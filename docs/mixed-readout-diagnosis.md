@@ -92,7 +92,6 @@ No padding missing rows, forcing chat logprobs or biasing labels to make checks
 green. The gate is complete, comparable score evidence without sacrificing the
 primary chat workload—not a friendlier error message.
 
-Runtime owner: `apollo-qwen38-gittensor-lmcache`, custom Podman store
-`/mnt/microvms/ai/cache/podman-root`, runroot `/run/apollo-ftw-containers`.
-Build provenance lives at `/mnt/data/ai/validation/20260922-qwen38-repro`;
-its `run-lmcache.sh` differs from active arguments and is not a restoration recipe.
+Runtime: the engine container, run from a dedicated container store with its own
+runroot. Build provenance is kept privately; its `run-lmcache.sh` differs from the
+active arguments and is not a restoration recipe.

@@ -20,7 +20,7 @@ rustup target add x86_64-unknown-linux-musl
 cargo build --release --target x86_64-unknown-linux-musl
 ```
 
-`build.sh` is the Apollo convenience wrapper: it installs a minimal toolchain
+`build.sh` is the convenience wrapper: it installs a minimal toolchain
 under `RUSTUP_HOME`/`CARGO_HOME` if `cargo` is missing and builds in place.
 
 ## Run

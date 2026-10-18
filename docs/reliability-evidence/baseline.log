@@ -1,3 +1,0 @@
-cargo test --manifest-path sidecar-rs/Cargo.toml
-make: cargo: No such file or directory
-make: *** [Makefile:16: test] Error 127

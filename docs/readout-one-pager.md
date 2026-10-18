@@ -39,8 +39,8 @@ See [wire contract](wire.md) and [implementation](../sidecar-rs/src/main.rs).
 
 ## Latest verification
 
-- [Reliability receipts](reliability-evidence/receipt.md) and
-  [final Apollo verification](reliability-evidence/apollo-merge-validation.txt):
+- Reliability receipts (kept privately) and
+  final verification (kept privately):
   **47 tests in each debug/release profile** (46 unit + one integration).
   Formatter/Clippy components are unavailable; the homelab prerequisite gate is blocked.
 

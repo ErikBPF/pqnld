@@ -2,7 +2,7 @@
 
 ## First live experiment: 2026-09-27
 
-Ran the historical Python `benchmarks/compare.py` on Apollo's `qwen38-27b-nvfp4`
+Ran the historical Python comparison harness against a served 27B NVFP4 model
 via a temporary SSH tunnel. Eight synthetic selection cases: 2/3/10/26 options,
 each in both orders. Four arms ran sequentially in seeded shuffled order per case. Result
 caching was disabled; engine prefix-cache state was uncontrolled. These are
