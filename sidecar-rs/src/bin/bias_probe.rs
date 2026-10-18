@@ -412,11 +412,25 @@ async fn capability_probe(client: &Client, out: &Path) -> Result<Value, String> 
     report.insert("completion_n_probs".into(), json!({"status": status, "body": completion}));
     let (status, props) = client.post("/props", &json!({})).await?;
     report.insert("props".into(), json!({"status": status, "body": props}));
-    let verdict = if report["tokenize"]["status"] == 200
+    // An engine with no native read may still expose the answer-slot distribution on
+    // the OpenAI chat surface (Strata's patched server, for instance).
+    let (status, chat) = client
+        .post(
+            "/v1/chat/completions",
+            &json!({"messages": [{"role": "user", "content": "Options:\na) Paris\nb) Berlin\nReply with one letter."}],
+              "max_tokens": 1, "temperature": 0, "logprobs": true, "top_logprobs": 5}),
+        )
+        .await?;
+    report.insert("chat_logprobs".into(), json!({"status": status, "body": chat}));
+    let native_ok = report["tokenize"]["status"] == 200
         && report["completion_n_probs"]["status"] == 200
-        && report["completion_n_probs"]["body"]["completion_probabilities"][0]["top_logprobs"].is_array()
-    {
+        && report["completion_n_probs"]["body"]["completion_probabilities"][0]["top_logprobs"].is_array();
+    let chat_ok = report["chat_logprobs"]["status"] == 200
+        && report["chat_logprobs"]["body"]["choices"][0]["logprobs"]["content"][0]["top_logprobs"].is_array();
+    let verdict = if native_ok {
         "native-top-k-surface-present"
+    } else if chat_ok {
+        "chat-logprob-surface-present"
     } else {
         "gap"
     };
