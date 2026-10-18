@@ -86,6 +86,5 @@ llama.cpp shape, before anything that could look OpenAI-compatible).
 
 Sequential repeats of one question are identical against one running engine, and the
 lettered readout on the chat surface keeps a decision stable when the labels are
-reassigned. Check `/v1/capabilities` on the running deployment, and
-[label-bias-results.md](label-bias-results.md) for the measurements behind these
-choices.
+reassigned. Check `/v1/capabilities` on the running deployment before trusting a
+decision surface.

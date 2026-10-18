@@ -248,7 +248,6 @@ llama.cpp read width: the generic top-k readout **escalates**. It starts at
 `max(options, 20)` (or the descriptor's `top_k_floor`, which therefore only sets the
 starting rung) and retries at 512, 2048 and 4096 while option labels are missing,
 logging each rung, and refuses only if the widest rung still cannot see every label.
-Measurements are in [label-bias-results.md](label-bias-results.md).
 
 llama.cpp lettered surface: the readout uses the **chat** surface
 (`/v1/chat/completions` with `letter_system_prompt`). `lettered_surface: "native"`
@@ -261,11 +260,10 @@ pinned `ggml-org/llama.cpp` image for the native top-k surface —
 `/tokenize` → one id per label, `/completion` `n_probs` accepted at 8/20/64/256
 with exactly that many `top_logprobs` returned (no hard cap), `/props` and
 `/health` present, and fail-closed refusal when a label is missing. Coverage is
-model-dependent: with a 4B tool-calling model's prompt format the required read
-width lay between `top_k_floor: 512` (complete only up to 7 options) and
-`4096` (complete up to 26). Exact-id scoring is still unavailable and refused
-honestly; >26 options still route to the echo path and are refused. Evidence:
-`docs/label-bias-results.md`.
+model-dependent: on a model whose answer slot ranks labels deep, the required read
+width lies well above the default 20, which is what the escalation ladder covers.
+Exact-id scoring is still unavailable and refused honestly; >26 options still route
+to the echo path and are refused.
 
 Unresolved / to verify before claiming live adapter support: SGLang's OpenAI
 chat coverage for top-k (`top_logprobs`) under reasoning models; whether OpenAI's

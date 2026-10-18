@@ -1,8 +1,7 @@
 # Changelog
 
-Behaviour of each release, stated as it is. Measurements and receipts live in
-[docs/label-bias-results.md](docs/label-bias-results.md) and the homelab
-coordination record.
+Behaviour of each release, stated as it is. The measurements behind these choices
+are kept in the operator's private records rather than in this repository.
 
 ## 0.4.0
 

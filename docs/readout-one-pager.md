@@ -35,7 +35,7 @@ See [wire contract](wire.md) and [implementation](../sidecar-rs/src/main.rs).
   parser-unit coverage. llama.cpp's lettered readout uses the chat surface with the
   letter system prompt (`lettered_surface: "native"` selects the raw completion
   prompt), and its read width widens itself until every option label is visible, so
-  a descriptor needs no `top_k_floor`; see [label-bias-results.md](label-bias-results.md).
+  a descriptor needs no `top_k_floor`.
 
 ## Latest verification
 
