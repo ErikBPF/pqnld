@@ -288,6 +288,13 @@ fn extended_labels() -> Vec<char> {    let mut v = Vec::new();
             v.push(c);
         }
     }
+    // CJK Unified Ideographs: single-token labels in Qwen-family tokenizers
+    // widen the readout past the ~208 Latin/Greek/Cyrillic letters.
+    for cp in 0x4E00u32..0x4E80 {
+        if let Some(c) = char::from_u32(cp) {
+            v.push(c);
+        }
+    }
     v
 }
 
@@ -378,9 +385,9 @@ fn is_empty_state(value: &Value) -> bool {
     }
 }
 
-fn letter_of(token: &str) -> Option<String> {
+fn letter_of(token: &str, allowed: &HashSet<String>) -> Option<String> {
     let t = token.trim().to_lowercase();
-    if t.chars().count() == 1 && LETTERS.contains(&t) {
+    if t.chars().count() == 1 && allowed.contains(&t) {
         Some(t)
     } else {
         None
@@ -587,8 +594,9 @@ async fn letter_scores(
                     top_token = best.map(|(_, token)| token);
                 }
                 let mut found: HashMap<String, f64> = HashMap::new();
+                let allowed: HashSet<String> = option_labels.iter().cloned().collect();
                 for (token, logprob) in scores {
-                    if let Some(label) = letter_of(&token) {
+                    if let Some(label) = letter_of(&token, &allowed) {
                         if option_labels.contains(&label) {
                             found.entry(label).or_insert(logprob);
                         }
@@ -732,9 +740,11 @@ async fn probe(ctx: &Ctx) -> Result<Mode, EngineError> {
     });
     let keys: Vec<String> = vec!["red".to_string(), "blue".to_string(), "green".to_string()];
     let lettered = match letter_scores(ctx, &Value::String(PROBE_STATE.to_string()), &probe_question, &keys).await {
-        Ok((_, _, Some(top))) => letter_of(&top)
-            .map(|l| ctx.spec.letters.contains(&l))
-            .unwrap_or(false),
+        Ok((_, _, Some(top))) => {
+            let allowed: HashSet<String> =
+                ctx.spec.letters.chars().map(|c| c.to_lowercase().to_string()).collect();
+            letter_of(&top, &allowed).is_some()
+        }
         Ok((_, _, None)) => false,
         Err(e @ EngineError::Unsupported(_)) => {
             if ctx.spec.specific_token_scores {
