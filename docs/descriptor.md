@@ -29,6 +29,8 @@ without breaking.
 | `lettered_surface` | `"chat"` | llama.cpp only: `"chat"` reads the lettered answer slot through `/v1/chat/completions` with `letter_system_prompt`; `"native"` reads the raw `/completion` prompt instead. Ignored by the other engine kinds, which have their own surfaces |
 | `top_k_floor` | `null` | *Starting* width for the generic top-k read when the exact-id path is unavailable (`null` = `max(options, 20)`). The readout then escalates on its own: while option labels are missing it retries at 512, 2048 and 4096, logging each escalation, and refuses only if the widest rung still cannot see every label. Setting this field skips the narrower rungs |
 
+| `allow_partial_readout` | `false` | Certify an answer when some offered labels never appear in the read. `top-k` is ordered by probability, so every unread label's probability is at most the read's smallest entry (`read_floor`). With this on, the visible distribution is renormalised over the labels actually read **only if the visible winner's probability exceeds that floor**; otherwise the question is still refused, because an unread label could win. Unread mass is logged. |
+
 ## Readout modes
 
 - **`lettered`** — render options with single-letter labels and read the
