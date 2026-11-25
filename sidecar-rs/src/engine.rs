@@ -166,7 +166,7 @@ pub fn build(
         usage: AtomicI64::new(0),
     };
     match kind {
-        EngineKind::Vllm => Arc::new(VllmEngine { endpoint }),
+        EngineKind::Vllm => Arc::new(VllmEngine { endpoint, limit: top_k_floor.unwrap_or(20) }),
         EngineKind::LlamaCpp => Arc::new(LlamaCppEngine { endpoint, lettered_chat }),
         EngineKind::Sglang => Arc::new(SglangEngine { endpoint }),
         EngineKind::OpenAi => Arc::new(OpenAiEngine {
@@ -269,6 +269,9 @@ impl Endpoint {
 
 pub struct VllmEngine {
     endpoint: Endpoint,
+    /// Widest generic top-k read the deployment serves; the OpenAI-compatible
+    /// default is 20, a decision-oriented server may declare more.
+    limit: usize,
 }
 
 impl Engine for VllmEngine {
@@ -278,7 +281,7 @@ impl Engine for VllmEngine {
             exact_ids: true,
             top_k: true,
             prompt_logprobs: true,
-            max_top_k: Some(20),
+            max_top_k: Some(self.limit),
             max_explicit_ids: Some(128),
             surface: Surface::ChatCompletions,
         }
@@ -317,7 +320,7 @@ impl Engine for VllmEngine {
 
     fn topk<'a>(&'a self, prompt: &'a str, k: usize) -> BoxFuture<'a, Result<Vec<(String, f64)>, EngineError>> {
         Box::pin(async move {
-            let request = self.endpoint.chat_body(prompt, json!({"top_logprobs": k}));
+            let request = self.endpoint.chat_body(prompt, json!({"top_logprobs": k.min(self.limit)}));
             let payload = self.endpoint.post_json("/v1/chat/completions", &request).await?;
             parse_chat_topk(&payload).ok_or_else(no_answer_slot)
         })
