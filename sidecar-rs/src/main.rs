@@ -103,12 +103,16 @@ struct ModelSpec {
     /// other engine kinds, which have their own surfaces.
     #[serde(default)]
     lettered_surface: Option<String>,
-    /// Minimum generic top-k to request when the exact-id path is unavailable.
-    /// llama.cpp has no exact-id scoring, and its answer-slot distribution can
-    /// place option labels far below the default k, so a model that needs this
-    /// path declares how wide to read.
+    /// *Starting* width for the generic top-k read when the exact-id path is
+    /// unavailable. The readout escalates from here while option labels are
+    /// missing; it is not a ceiling.
     #[serde(default)]
     top_k_floor: Option<usize>,
+    /// Widest generic top-k read the deployment serves. OpenAI-compatible
+    /// servers default to 20; a decision-oriented server declares its real
+    /// width, which caps both the request and the escalation ladder.
+    #[serde(default)]
+    max_top_k: Option<usize>,
 }
 
 impl Default for ModelSpec {
@@ -125,6 +129,7 @@ impl Default for ModelSpec {
             specific_token_scores: false,
             lettered_surface: None,
             top_k_floor: None,
+            max_top_k: None,
         }
     }
 }
@@ -217,8 +222,8 @@ fn capabilities_report(ctx: &Ctx) -> Value {
         "top_k": caps.top_k,
         "prompt_logprobs": caps.prompt_logprobs,
         "max_top_k": caps.max_top_k,
-        "read_width_start": topk_request_size(0, ctx.spec.top_k_floor),
-        "read_width_ladder": read_ladder(0, ctx.spec.top_k_floor),
+        "read_width_start": read_ladder(0, ctx.spec.top_k_floor, caps.max_top_k)[0],
+        "read_width_ladder": read_ladder(0, ctx.spec.top_k_floor, caps.max_top_k),
         "lettered_surface": if lettered_chat_surface(ctx.spec.lettered_surface.as_deref()) { "chat" } else { "native" },
         "readout": ctx.spec.readout,
         "letters": ctx.spec.letters.chars().count(),
@@ -239,12 +244,21 @@ fn lettered_chat_surface(lettered_surface: Option<&str>) -> bool {
 /// no exact-id scoring here, so a label the server ranks below the read width is
 /// simply invisible; a bounded ladder finds the width the model actually needs
 /// instead of refusing a question that a wider read would answer.
-fn read_ladder(options: usize, floor: Option<usize>) -> Vec<usize> {
-    let start = topk_request_size(options, floor);
+fn read_ladder(options: usize, floor: Option<usize>, served: Option<usize>) -> Vec<usize> {
+    let requested = topk_request_size(options, floor);
+    let start = served.map(|served| requested.min(served)).unwrap_or(requested);
     let mut ladder = vec![start];
     for step in [512usize, 2048, 4096] {
-        if step > start {
+        if step > start && served.map(|served| step <= served).unwrap_or(true) {
             ladder.push(step);
+        }
+    }
+    // The served width is the last rung even when it is not one of the fixed
+    // steps: reading narrower than the deployment allows would refuse questions
+    // a full-width read answers.
+    if let Some(served) = served {
+        if served > start && !ladder.contains(&served) {
+            ladder.push(served);
         }
     }
     ladder
@@ -580,7 +594,8 @@ async fn letter_scores(
                 }
             }
         } else {
-            let ladder = read_ladder(keys.len(), ctx.spec.top_k_floor);
+            let ladder =
+                read_ladder(keys.len(), ctx.spec.top_k_floor, ctx.engine.capabilities().max_top_k);
             let last = *ladder.last().expect("the ladder is never empty");
             for width in ladder {
                 let scores = ctx.engine.topk(&body, width).await?;
@@ -630,7 +645,11 @@ async fn letter_scores(
              {ladder}; raise the descriptor's top_k_floor, or use the chat surface via \
              lettered_surface for the lettered readout)",
             missing.join(", "),
-            ladder = read_ladder(keys.len(), ctx.spec.top_k_floor)
+            ladder = read_ladder(
+                keys.len(),
+                ctx.spec.top_k_floor,
+                ctx.engine.capabilities().max_top_k,
+            )
                 .iter()
                 .map(|w| w.to_string())
                 .collect::<Vec<_>>()
@@ -1306,7 +1325,7 @@ async fn main() {
         model.clone(),
         spec.letter_system_prompt.clone(),
         spec.enable_thinking,
-        spec.top_k_floor,
+        spec.max_top_k,
         lettered_chat_surface(spec.lettered_surface.as_deref()),
     );
     let ctx = Arc::new(Ctx {

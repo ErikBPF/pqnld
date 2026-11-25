@@ -190,6 +190,18 @@ Feature: Decision readout sidecar over a served model
     When the readout sidecar resolves its automatic readout route
     Then a top token from that alphabet is accepted as an option letter
     And a Latin letter outside that alphabet is not accepted
+  # Bound to declared_served_width_reaches_the_request_and_the_capabilities
+  # (sidecar-rs/src/engine.rs) and
+  # read_ladder_starts_at_the_declared_width_and_stops_at_the_served_width
+  # (sidecar-rs/src/tests_readout.rs).
+  @DR-21
+  Scenario: A declared served width caps the read ladder
+    Given a descriptor that declares the width its deployment serves
+    When the readout sidecar reads the answer slot
+    Then the request asks for that width, not the ladder's top rung
+    And the escalation ladder stops at that width
+    And the capability report advertises the same width
+
   Scenario: Explicit token scoring requires complete distinct single-token labels
     Given a descriptor enables specific token scores
     When the engine tokenizes an option label into multiple tokens

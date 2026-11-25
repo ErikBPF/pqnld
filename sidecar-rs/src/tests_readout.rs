@@ -432,17 +432,24 @@ fn capabilities_report_states_what_the_engine_cannot_do() {
     assert_eq!(report["unsupported"]["prompt_logprob_echo"], json!(true));
     assert_eq!(report["readout"], json!("auto"));
     assert_eq!(report["letters"], json!(26));
-    assert_eq!(report["read_width_ladder"], json!([20, 512, 2048, 4096]));
+    // The mock engine serves 20 slots, so the ladder stops there instead of
+    // issuing four requests that all get clamped to the same width.
+    assert_eq!(report["read_width_ladder"], json!([20]));
     assert_eq!(report["lettered_surface"], json!("chat"));
 }
 
 #[test]
-fn read_ladder_starts_at_the_declared_width_and_stops_at_the_cap() {
-    assert_eq!(read_ladder(3, None), vec![20, 512, 2048, 4096]);
-    assert_eq!(read_ladder(25, None), vec![25, 512, 2048, 4096]);
-    assert_eq!(read_ladder(3, Some(512)), vec![512, 2048, 4096]);
-    assert_eq!(read_ladder(3, Some(4096)), vec![4096]);
-    assert_eq!(read_ladder(300, Some(64)), vec![300, 512, 2048, 4096]);
+fn read_ladder_starts_at_the_declared_width_and_stops_at_the_served_width() {
+    assert_eq!(read_ladder(3, None, None), vec![20, 512, 2048, 4096]);
+    assert_eq!(read_ladder(25, None, None), vec![25, 512, 2048, 4096]);
+    assert_eq!(read_ladder(3, Some(512), None), vec![512, 2048, 4096]);
+    assert_eq!(read_ladder(300, Some(64), None), vec![300, 512, 2048, 4096]);
+
+    // A declared served width caps every rung, including the first one: a floor
+    // the server cannot serve must not be requested or advertised.
+    assert_eq!(read_ladder(3, None, Some(20)), vec![20]);
+    assert_eq!(read_ladder(3, Some(40), Some(160)), vec![40, 160]);
+    assert_eq!(read_ladder(200, None, Some(160)), vec![160]);
 }
 
 #[test]
