@@ -701,6 +701,57 @@ async fn probe_resolves_the_lettered_route_from_the_descriptor_alphabet() {
     assert!(matches!(probe(&ctx).await, Ok(Mode::Echo)));
 }
 
+#[tokio::test]
+async fn partial_read_keeps_a_case_distinct_label_that_wins() {
+    // Review P2: letters "aBc" offer labels that differ only by case. A read that
+    // returns "B" must map to the offered label; lowercasing folded it away and
+    // certified the runner-up instead.
+    let mut spec = letters_spec(false);
+    spec.letters = "aBc".to_string();
+    spec.allow_partial_readout = true;
+    let (ctx, _) = make_ctx(
+        MockEngine::topk_only(&[("B", -0.5), ("a", -1.2), ("x", -2.3)]),
+        spec,
+    );
+    let (_, answer, _) = score_question(
+        ctx,
+        Value::Null,
+        "q".to_string(),
+        choice("Pick", &["first", "second", "third"]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(answer["choice"], json!("second"));
+}
+
+#[tokio::test]
+async fn partial_read_is_certified_only_above_the_unread_floor() {
+    // DR-22: top-k is ordered by probability, so every label the read omits sits
+    // at or below the read's smallest entry. "c" is absent; "a" clears the floor,
+    // so the answer is certified and renormalised over the labels actually read.
+    let pick = || choice("Pick", &["red", "blue", "green"]);
+    let mut spec = letters_spec(false);
+    spec.allow_partial_readout = true;
+    let (ctx, _) = make_ctx(MockEngine::topk_only(&[("a", -0.02), ("b", -3.0)]), spec);
+    let (_, answer, _) = score_question(ctx, Value::Null, "q".to_string(), pick()).await.unwrap();
+    assert_eq!(answer["choice"], json!("red"));
+    let probabilities = answer["probabilities"].as_object().unwrap();
+    assert_eq!(probabilities.len(), 3);
+    let total: f64 = probabilities.values().map(|p| p.as_f64().unwrap()).sum();
+    assert!((total - 1.0).abs() < 1e-9, "{total}");
+
+    // The certification is opt-in: the same partial read refuses by default.
+    let (ctx, _) = make_ctx(MockEngine::topk_only(&[("a", -0.02), ("b", -3.0)]), letters_spec(false));
+    assert!(score_question(ctx, Value::Null, "q".to_string(), pick()).await.is_err());
+
+    // Only one label read: the winner equals the floor, so an unread label could
+    // still win and the question is refused.
+    let mut spec = letters_spec(false);
+    spec.allow_partial_readout = true;
+    let (ctx, _) = make_ctx(MockEngine::topk_only(&[("a", -0.02)]), spec);
+    assert!(score_question(ctx, Value::Null, "q".to_string(), pick()).await.is_err());
+}
+
 #[test]
 fn extended_labels_are_unique_and_large() {
     let labels = extended_labels();

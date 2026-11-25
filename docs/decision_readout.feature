@@ -190,6 +190,7 @@ Feature: Decision readout sidecar over a served model
     When the readout sidecar resolves its automatic readout route
     Then a top token from that alphabet is accepted as an option letter
     And a Latin letter outside that alphabet is not accepted
+
   # Bound to declared_served_width_reaches_the_request_and_the_capabilities
   # (sidecar-rs/src/engine.rs) and
   # read_ladder_starts_at_the_declared_width_and_stops_at_the_served_width
@@ -201,6 +202,18 @@ Feature: Decision readout sidecar over a served model
     Then the request asks for that width, not the ladder's top rung
     And the escalation ladder stops at that width
     And the capability report advertises the same width
+
+  # Bound to partial_read_is_certified_only_above_the_unread_floor in
+  # sidecar-rs/src/tests_readout.rs.
+  @DR-22
+  Scenario: A partial read is certified only above the unread floor
+    Given a generic top-k read that omits some offered option labels
+    And a descriptor that allows a partial readout
+    When the readout sidecar answers the question
+    Then the answer is certified only when the visible winner beats the read's floor
+    And the probabilities renormalise over the labels actually read
+    And a visible winner at or below the floor is still refused
+
 
   Scenario: Explicit token scoring requires complete distinct single-token labels
     Given a descriptor enables specific token scores

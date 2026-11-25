@@ -113,6 +113,12 @@ struct ModelSpec {
     /// width, which caps both the request and the escalation ladder.
     #[serde(default)]
     max_top_k: Option<usize>,
+    /// Certify an answer from a partial read: when some offered labels never appear
+    /// in the read, answer with the visible distribution only if the visible winner
+    /// provably beats every unread label (top-k is ordered, so each unread token's
+    /// probability is at most the read's last entry).
+    #[serde(default)]
+    allow_partial_readout: bool,
 }
 
 impl Default for ModelSpec {
@@ -130,6 +136,7 @@ impl Default for ModelSpec {
             lettered_surface: None,
             top_k_floor: None,
             max_top_k: None,
+            allow_partial_readout: false,
         }
     }
 }
@@ -400,9 +407,16 @@ fn is_empty_state(value: &Value) -> bool {
 }
 
 fn letter_of(token: &str, allowed: &HashSet<String>) -> Option<String> {
-    let t = token.trim().to_lowercase();
-    if t.chars().count() == 1 && allowed.contains(&t) {
-        Some(t)
+    let t = token.trim();
+    // Exact offered label first: a descriptor may offer labels that differ only by
+    // case ("a" beside "B"), and lowercasing both would fold them into one and
+    // discard the label the read actually returned.
+    if t.chars().count() == 1 && allowed.contains(t) {
+        return Some(t.to_string());
+    }
+    let lowered = t.to_lowercase();
+    if lowered.chars().count() == 1 && allowed.contains(&lowered) {
+        Some(lowered)
     } else {
         None
     }
@@ -579,6 +593,9 @@ async fn letter_scores(
     let mut by_label: HashMap<String, f64> = HashMap::new();
     let mut usage_tokens: i64 = 0;
     let mut top_token: Option<String> = None;
+    // the smallest probability in the widest generic read: an upper bound for every
+    // offered label the read did not return
+    let mut read_floor: Option<f64> = None;
     for chunk in &chunks {
         if specific {
             let ids: Vec<u32> = chunk.iter().map(|label| id_by_label[label]).collect();
@@ -608,6 +625,9 @@ async fn letter_scores(
                     }
                     top_token = best.map(|(_, token)| token);
                 }
+                read_floor = scores.iter().map(|(_, lp)| *lp).fold(None, |acc: Option<f64>, lp| {
+                    Some(acc.map(|a| a.min(lp)).unwrap_or(lp))
+                });
                 let mut found: HashMap<String, f64> = HashMap::new();
                 let allowed: HashSet<String> = option_labels.iter().cloned().collect();
                 for (token, logprob) in scores {
@@ -640,6 +660,43 @@ async fn letter_scores(
         .cloned()
         .collect();
     if !missing.is_empty() {
+        // A partial read still determines the answer when the visible winner is
+        // provably above every unread token: top-k is ordered by probability, so
+        // each unread label's probability is at most the read's smallest entry.
+        if ctx.spec.allow_partial_readout {
+            if let (Some(floor), Some((winner, _))) = (
+                read_floor,
+                option_labels
+                    .iter()
+                    .filter_map(|l| by_label.get(l).map(|p| (l.clone(), *p)))
+                    .max_by(|a, b| a.1.total_cmp(&b.1)),
+            ) {
+                let visible: f64 = by_label.values().map(|lp| lp.exp()).sum();
+                let unread_mass = (1.0 - visible).max(0.0);
+                if floor.exp() < by_label[&winner].exp() {
+                    eprintln!(
+                        "readout: partial read certified ({winner} beats the {:.3e} floor; \
+                         {unread_mass:.3} of the mass unread, renormalised over {} of {} labels)",
+                        floor.exp(),
+                        by_label.len(),
+                        option_labels.len()
+                    );
+                    // an unread label contributes no probability mass: a floor log-prob
+                    // keeps the softmax finite instead of inventing an infinity
+                    let scores: Vec<f64> = option_labels
+                        .iter()
+                        .map(|l| by_label.get(l).copied().unwrap_or(-1e30))
+                        .collect();
+                    return Ok((scores, usage_tokens, top_token));
+                }
+                return Err(EngineError::Unsupported(format!(
+                    "partial read not certified: {} offered label(s) unread and the floor \
+                     {:.3e} is not below the best visible label; widen the read or chunk the options",
+                    missing.len(),
+                    floor.exp()
+                )));
+            }
+        }
         return Err(EngineError::Unsupported(format!(
             "answer-slot logprobs missing option labels: {} (generic top-k read at widths \
              {ladder}; raise the descriptor's top_k_floor, or use the chat surface via \
@@ -761,7 +818,7 @@ async fn probe(ctx: &Ctx) -> Result<Mode, EngineError> {
     let lettered = match letter_scores(ctx, &Value::String(PROBE_STATE.to_string()), &probe_question, &keys).await {
         Ok((_, _, Some(top))) => {
             let allowed: HashSet<String> =
-                ctx.spec.letters.chars().map(|c| c.to_lowercase().to_string()).collect();
+                ctx.spec.letters.chars().map(|c| c.to_string()).collect();
             letter_of(&top, &allowed).is_some()
         }
         Ok((_, _, None)) => false,
