@@ -147,6 +147,11 @@ pub async fn detect_kind(client: &reqwest::Client, base_url: &str) -> EngineKind
     EngineKind::Vllm
 }
 
+/// Default generic top-k width for a self-hosted vLLM-style deployment.
+const DEFAULT_SERVED_TOP_K: usize = 256;
+/// The OpenAI API documents a 20-slot `top_logprobs` cap.
+const OPENAI_SERVED_TOP_K: usize = 20;
+
 pub fn build(
     kind: EngineKind,
     client: reqwest::Client,
@@ -158,8 +163,10 @@ pub fn build(
     lettered_chat: bool,
 ) -> Arc<dyn Engine> {
     // The served width is separate from `top_k_floor`, which is only the first
-    // rung of the escalation ladder: an OpenAI-compatible server defaults to 20.
-    let served_top_k = max_top_k.unwrap_or(20);
+    // rung of the escalation ladder. A self-hosted vLLM-style server is assumed to
+    // serve a wide read until the descriptor says otherwise; the OpenAI API
+    // documents a 20-slot cap, so that adapter keeps the documented limit.
+    let served_top_k = max_top_k.unwrap_or(DEFAULT_SERVED_TOP_K);
     let endpoint = Endpoint {
         client,
         base_url,
@@ -175,9 +182,9 @@ pub fn build(
         EngineKind::OpenAi => Arc::new(OpenAiEngine {
             endpoint,
             // The OpenAI API caps top_logprobs at 20. An OpenAI-compatible server
-            // that accepts wider reads declares the width in the descriptor, so
+            // that accepts wider reads declares `max_top_k` in the descriptor, so
             // honour it instead of refusing to look.
-            limit: served_top_k,
+            limit: max_top_k.unwrap_or(OPENAI_SERVED_TOP_K),
         }),
     }
 }
@@ -1078,6 +1085,36 @@ mod tests {
         assert_eq!(openai_topk_size(2048, 20), 20);
         assert_eq!(openai_topk_size(2048, 2048), 2048);
         assert_eq!(openai_topk_size(64, 2048), 64);
+    }
+
+    #[tokio::test]
+    async fn default_served_width_is_wide_for_vllm_and_capped_for_the_openai_api() {
+        let build_default = |kind| {
+            build(
+                kind,
+                reqwest::Client::new(),
+                "http://127.0.0.1:1".to_string(),
+                "model".to_string(),
+                "system".to_string(),
+                false,
+                None,
+                true,
+            )
+        };
+        assert_eq!(build_default(EngineKind::Vllm).capabilities().max_top_k, Some(256));
+        assert_eq!(build_default(EngineKind::OpenAi).capabilities().max_top_k, Some(20));
+        // A declared width still overrides the adapter default.
+        let declared = build(
+            EngineKind::Vllm,
+            reqwest::Client::new(),
+            "http://127.0.0.1:1".to_string(),
+            "model".to_string(),
+            "system".to_string(),
+            false,
+            Some(160),
+            true,
+        );
+        assert_eq!(declared.capabilities().max_top_k, Some(160));
     }
 
     #[tokio::test]
