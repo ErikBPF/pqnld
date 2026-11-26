@@ -181,6 +181,15 @@ Feature: Decision readout sidecar over a served model
     Given a cached answer for a question
     When the same criteria are supplied in a different order
     Then the answer matches a fresh readout with that order
+
+  # Bound to probe_resolves_the_lettered_route_from_the_descriptor_alphabet in
+  # sidecar-rs/src/tests_readout.rs.
+  @DR-20
+  Scenario: A descriptor's own letters label the answer slot
+    Given a model descriptor whose letters are a non-Latin alphabet
+    When the readout sidecar resolves its automatic readout route
+    Then a top token from that alphabet is accepted as an option letter
+    And a Latin letter outside that alphabet is not accepted
   Scenario: Explicit token scoring requires complete distinct single-token labels
     Given a descriptor enables specific token scores
     When the engine tokenizes an option label into multiple tokens
