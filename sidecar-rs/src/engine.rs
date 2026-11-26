@@ -154,9 +154,12 @@ pub fn build(
     model: String,
     system_prompt: String,
     enable_thinking: bool,
-    top_k_floor: Option<usize>,
+    max_top_k: Option<usize>,
     lettered_chat: bool,
 ) -> Arc<dyn Engine> {
+    // The served width is separate from `top_k_floor`, which is only the first
+    // rung of the escalation ladder: an OpenAI-compatible server defaults to 20.
+    let served_top_k = max_top_k.unwrap_or(20);
     let endpoint = Endpoint {
         client,
         base_url,
@@ -166,15 +169,15 @@ pub fn build(
         usage: AtomicI64::new(0),
     };
     match kind {
-        EngineKind::Vllm => Arc::new(VllmEngine { endpoint }),
+        EngineKind::Vllm => Arc::new(VllmEngine { endpoint, limit: served_top_k }),
         EngineKind::LlamaCpp => Arc::new(LlamaCppEngine { endpoint, lettered_chat }),
         EngineKind::Sglang => Arc::new(SglangEngine { endpoint }),
         EngineKind::OpenAi => Arc::new(OpenAiEngine {
             endpoint,
             // The OpenAI API caps top_logprobs at 20. An OpenAI-compatible server
-            // that accepts wider reads (llama.cpp maps it to n_probs) declares the
-            // width in the descriptor, so honour it instead of refusing to look.
-            limit: top_k_floor.unwrap_or(20),
+            // that accepts wider reads declares the width in the descriptor, so
+            // honour it instead of refusing to look.
+            limit: served_top_k,
         }),
     }
 }
@@ -269,6 +272,9 @@ impl Endpoint {
 
 pub struct VllmEngine {
     endpoint: Endpoint,
+    /// Widest generic top-k read the deployment serves; the OpenAI-compatible
+    /// default is 20, a decision-oriented server may declare more.
+    limit: usize,
 }
 
 impl Engine for VllmEngine {
@@ -278,7 +284,7 @@ impl Engine for VllmEngine {
             exact_ids: true,
             top_k: true,
             prompt_logprobs: true,
-            max_top_k: Some(20),
+            max_top_k: Some(self.limit),
             max_explicit_ids: Some(128),
             surface: Surface::ChatCompletions,
         }
@@ -317,7 +323,7 @@ impl Engine for VllmEngine {
 
     fn topk<'a>(&'a self, prompt: &'a str, k: usize) -> BoxFuture<'a, Result<Vec<(String, f64)>, EngineError>> {
         Box::pin(async move {
-            let request = self.endpoint.chat_body(prompt, json!({"top_logprobs": k}));
+            let request = self.endpoint.chat_body(prompt, json!({"top_logprobs": k.min(self.limit)}));
             let payload = self.endpoint.post_json("/v1/chat/completions", &request).await?;
             parse_chat_topk(&payload).ok_or_else(no_answer_slot)
         })
@@ -1072,6 +1078,57 @@ mod tests {
         assert_eq!(openai_topk_size(2048, 20), 20);
         assert_eq!(openai_topk_size(2048, 2048), 2048);
         assert_eq!(openai_topk_size(64, 2048), 64);
+    }
+
+    #[tokio::test]
+    async fn declared_served_width_reaches_the_request_and_the_capabilities() {
+        use hyper::service::service_fn;
+        use hyper_util::rt::TokioIo;
+        use http_body_util::BodyExt;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let service = service_fn(move |request: hyper::Request<hyper::body::Incoming>| {
+                let tx = tx.clone();
+                async move {
+                    let body = request.into_body().collect().await.unwrap().to_bytes();
+                    if let Some(tx) = tx.lock().unwrap().take() {
+                        let _ = tx.send(String::from_utf8_lossy(&body).to_string());
+                    }
+                    let payload = json!({"choices": [{"logprobs": {"content": [{
+                        "token": "b", "logprob": -0.1, "top_logprobs": [{"token": "b", "logprob": -0.1}]}]}}]});
+                    Ok::<_, std::convert::Infallible>(crate::json_response(200, payload))
+                }
+            });
+            hyper::server::conn::http1::Builder::new()
+                .keep_alive(false)
+                .serve_connection(TokioIo::new(stream), service)
+                .await
+                .unwrap();
+        });
+        let client = reqwest::Client::builder().no_proxy()
+            .timeout(std::time::Duration::from_secs(2)).build().unwrap();
+        let engine = build(
+            EngineKind::Vllm,
+            client,
+            url,
+            "test".to_string(),
+            "system".to_string(),
+            false,
+            Some(160),
+            false,
+        );
+        assert_eq!(engine.capabilities().max_top_k, Some(160));
+        // Ask wider than the deployment serves: the request carries the declared
+        // width, not the ladder's top rung.
+        engine.topk("prompt", 4096).await.unwrap();
+        server.await.unwrap();
+        let body: Value = serde_json::from_str(&rx.await.unwrap()).unwrap();
+        assert_eq!(body["top_logprobs"], json!(160));
     }
 
     fn openai_top_logprobs_response() {
