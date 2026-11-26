@@ -649,11 +649,49 @@ async fn valid_http_and_chat_retain_typed_envelopes() {
 
 #[test]
 fn letter_of_accepts_only_single_letters() {
-    assert_eq!(letter_of("A").as_deref(), Some("a"));
-    assert_eq!(letter_of(" a ").as_deref(), Some("a"));
-    assert_eq!(letter_of("apple"), None);
-    assert_eq!(letter_of("ab"), None);
-    assert_eq!(letter_of("1"), None);
+    let latin: std::collections::HashSet<String> =
+        "abc".chars().map(|c| c.to_string()).collect();
+    assert_eq!(letter_of("A", &latin).as_deref(), Some("a"));
+    assert_eq!(letter_of(" a ", &latin).as_deref(), Some("a"));
+    assert_eq!(letter_of("apple", &latin), None);
+    assert_eq!(letter_of("ab", &latin), None);
+    assert_eq!(letter_of("z", &latin), None);
+
+    // Non-Latin alphabets: the readout matches the question's own labels, so a
+    // Cyrillic or CJK label is accepted once the descriptor offers it.
+    let cyrillic: std::collections::HashSet<String> =
+        "\u{430}\u{431}\u{430}".chars().map(|c| c.to_string()).collect();
+    assert_eq!(letter_of("\u{410}", &cyrillic).as_deref(), Some("\u{430}"));
+    let cjk: std::collections::HashSet<String> =
+        "\u{4e00}\u{4e01}".chars().map(|c| c.to_string()).collect();
+    assert_eq!(letter_of("\u{4e00}", &cjk).as_deref(), Some("\u{4e00}"));
+    assert_eq!(letter_of("\u{4e02}", &cjk), None);
+    assert_eq!(letter_of("1", &latin), None);
+}
+
+#[tokio::test]
+async fn probe_resolves_the_lettered_route_from_the_descriptor_alphabet() {
+    // DR-20: the automatic probe compares the answer-slot token against the
+    // descriptor's own `letters`, so a non-Latin descriptor stays lettered.
+    let cyrillic = || ModelSpec {
+        readout: "auto".to_string(),
+        letters: "\u{430}\u{431}\u{432}".to_string(),
+        ..Default::default()
+    };
+    let (ctx, _) = make_ctx(
+        MockEngine::topk_only(&[("\u{430}", -0.02), ("\u{431}", -1.0), ("\u{432}", -1.1)]),
+        cyrillic(),
+    );
+    assert!(matches!(probe(&ctx).await, Ok(Mode::Lettered)));
+
+    // Every option label is present, but the top token is Latin and therefore
+    // outside the descriptor's alphabet; the default descriptor ships a chat
+    // template, so the route falls back to echo rather than reading "a" as one.
+    let (ctx, _) = make_ctx(
+        MockEngine::topk_only(&[("a", -0.02), ("\u{430}", -1.0), ("\u{431}", -1.0), ("\u{432}", -1.1)]),
+        cyrillic(),
+    );
+    assert!(matches!(probe(&ctx).await, Ok(Mode::Echo)));
 }
 
 #[test]

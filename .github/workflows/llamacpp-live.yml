@@ -39,14 +39,21 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/llama.cpp/build
-          key: llamacpp-${{ env.LLAMACPP_TAG }}-${{ runner.arch }}
+          key: llamacpp-${{ env.LLAMACPP_TAG }}-${{ runner.arch }}-noui-v1
       - name: Build llama-server from the pinned tag
         run: |
           set -euo pipefail
           if [ ! -x ~/llama.cpp/build/bin/llama-server ]; then
             git clone --depth 1 --branch "$LLAMACPP_TAG" https://github.com/ggml-org/llama.cpp ~/llama.cpp
+            # The lane drives the HTTP API only, so it builds without the embedded
+            # Web UI. LLAMA_USE_PREBUILT_UI=OFF also skips the build-time download of
+            # the prebuilt dist from the upstream Hugging Face bucket; that download
+            # fails, and a half-extracted dist previously tripped ui_validate_assets.
+            # A restored build directory can still hold such a tree, so drop it.
+            rm -rf ~/llama.cpp/build/tools/ui/dist
             cmake -S ~/llama.cpp -B ~/llama.cpp/build -G Ninja \
-              -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF
+              -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF \
+              -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF
             cmake --build ~/llama.cpp/build --target llama-server -j "$(nproc)"
           fi
           ~/llama.cpp/build/bin/llama-server --version
