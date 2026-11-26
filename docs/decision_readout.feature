@@ -215,6 +215,16 @@ Feature: Decision readout sidecar over a served model
     And a visible winner at or below the floor is still refused
 
 
+  # Bound to default_served_width_is_wide_for_vllm_and_capped_for_the_openai_api
+  # (sidecar-rs/src/engine.rs).
+  @DR-23
+  Scenario: An undeclared served width falls back to the adapter default
+    Given a descriptor that declares no served width
+    When the sidecar builds a vLLM-style adapter
+    Then the served width is 256
+    And the OpenAI adapter keeps the API's 20-slot cap
+    And a descriptor that declares a width overrides both
+
   Scenario: Explicit token scoring requires complete distinct single-token labels
     Given a descriptor enables specific token scores
     When the engine tokenizes an option label into multiple tokens
